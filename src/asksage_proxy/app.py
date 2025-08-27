@@ -9,6 +9,7 @@ from aiohttp import web
 from loguru import logger
 
 from .config import AskSageConfig, load_config
+from .endpoints.chat import chat_completions
 from .endpoints.models import get_models
 from .models import ModelRegistry
 
@@ -76,9 +77,9 @@ def setup_routes(app: web.Application) -> None:
 
     # OpenAI compatible endpoints
     app.router.add_get("/v1/models", get_models)
+    app.router.add_post("/v1/chat/completions", chat_completions)
 
     # TODO: Add other endpoints
-    # app.router.add_post("/v1/chat/completions", chat_completions)
     # app.router.add_post("/v1/completions", completions)
     # app.router.add_post("/v1/embeddings", embeddings)
 
