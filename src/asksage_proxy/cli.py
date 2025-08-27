@@ -1,6 +1,7 @@
 """Command line interface for AskSage Proxy."""
 
 import argparse
+import asyncio
 import os
 import subprocess
 import sys
@@ -8,9 +9,12 @@ from pathlib import Path
 from typing import Optional
 
 from loguru import logger
+from packaging import version
 
+from .__init__ import __version__
 from .app import run_app
 from .config import AskSageConfig, load_config, save_config
+from .endpoints.extras import get_latest_pypi_version
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -124,6 +128,28 @@ def open_in_editor(config_path: Optional[str] = None) -> None:
     sys.exit(1)
 
 
+def version_check() -> str:
+    """Check current version against PyPI and return version info with warnings.
+
+    Returns:
+        str: Version information string, potentially with update warnings.
+    """
+    ver_content = [__version__]
+    latest = asyncio.run(get_latest_pypi_version())
+
+    if latest:
+        # Use packaging.version to compare versions correctly
+        if version.parse(latest) > version.parse(__version__):
+            ver_content.extend(
+                [
+                    f"New version available: {latest}",
+                    "Update with `pip install --upgrade asksage-proxy`",
+                ]
+            )
+
+    return "\n".join(ver_content)
+
+
 def main() -> None:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -163,6 +189,14 @@ Examples:
         help="Edit configuration file with system default editor",
     )
 
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"%(prog)s {version_check()}",
+        help="Show the version and check for updates",
+    )
+
     args = parser.parse_args()
 
     # Handle special actions first
@@ -178,6 +212,9 @@ Examples:
     setup_logging(args.verbose)
 
     try:
+        # Display version check warning on startup (like argo-proxy)
+        logger.warning(f"Running AskSage-Proxy {version_check()}")
+
         config = load_config(args.config)
 
         # Override config with command line arguments
