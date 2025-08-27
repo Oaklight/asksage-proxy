@@ -83,7 +83,6 @@ def open_in_editor(config_path: Optional[str] = None) -> None:
             template_config = AskSageConfig(
                 host="0.0.0.0",
                 port=8080,
-                anl_email="your-email@anl.gov",
                 api_key="",  # Will use environment variable
             )
             save_config(template_config, str(default_path))
