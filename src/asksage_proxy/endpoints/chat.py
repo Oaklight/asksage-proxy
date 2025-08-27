@@ -11,6 +11,7 @@ from loguru import logger
 
 from ..client import AskSageClient
 from ..config import AskSageConfig
+from ..models import ModelRegistry
 from ..types import (
     FINISH_REASONS,
     ChatCompletion,
@@ -170,18 +171,6 @@ async def transform_openai_to_asksage(data: Dict[str, Any]) -> Dict[str, Any]:
     # Add system prompt if present
     if system_prompt:
         asksage_payload["system_prompt"] = system_prompt
-
-    # Handle max_tokens -> limit_references mapping (approximate)
-    if "max_tokens" in data:
-        # AskSage doesn't have direct max_tokens, but we can use limit_references
-        # as a rough approximation for controlling response length
-        max_tokens = data["max_tokens"]
-        if max_tokens <= 100:
-            asksage_payload["limit_references"] = 1
-        elif max_tokens <= 500:
-            asksage_payload["limit_references"] = 3
-        else:
-            asksage_payload["limit_references"] = 5
 
     # Handle tools (function calling)
     if "tools" in data:
@@ -506,6 +495,7 @@ async def chat_completions(
         Either a JSON response or streaming response
     """
     config: AskSageConfig = request.app["config"]
+    model_registry: ModelRegistry = request.app["model_registry"]
 
     try:
         # Parse request data
@@ -543,8 +533,17 @@ async def chat_completions(
         create_timestamp = int(time.time())
         stream = data.get("stream", False)
 
-        # Create AskSage client
-        async with AskSageClient(config) as client:
+        # Get API key from the model registry's API key manager
+        api_key = None
+        if model_registry.api_key_manager:
+            api_key_config = model_registry.api_key_manager.get_next_key()
+            api_key = api_key_config.key
+            logger.info(
+                f"Using API key '{api_key_config.name or 'unnamed'}' for chat request"
+            )
+
+        # Create AskSage client with selected API key
+        async with AskSageClient(config, api_key=api_key) as client:
             if stream:
                 return await handle_streaming_request(
                     client, asksage_payload, model_name, create_timestamp, request

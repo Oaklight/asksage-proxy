@@ -2,9 +2,9 @@
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 from loguru import logger
@@ -19,6 +19,22 @@ from .utils import (
 
 
 @dataclass
+class ApiKeyConfig:
+    """Configuration for a single API key with priority weight."""
+
+    key: str
+    weight: float = 1.0  # Priority weight, higher means more likely to be selected
+    name: Optional[str] = None  # Optional name for the API key
+
+    def __post_init__(self):
+        """Validate API key configuration."""
+        if not self.key:
+            raise ValueError("API key cannot be empty")
+        if self.weight <= 0:
+            raise ValueError("API key weight must be positive")
+
+
+@dataclass
 class AskSageConfig:
     """Configuration for AskSage Proxy server."""
 
@@ -28,7 +44,7 @@ class AskSageConfig:
     verbose: bool = True
 
     # AskSage API settings
-    api_key: str = ""
+    api_keys: List[ApiKeyConfig] = field(default_factory=list)  # API keys with weights
     asksage_server_base_url: str = "https://api.asksage.anl.gov/server"
     asksage_user_base_url: str = "https://api.asksage.anl.gov/user"
     cert_path: Optional[str] = None
@@ -50,20 +66,95 @@ class AskSageConfig:
             expanded_path = os.path.expanduser(cert_path)
             valid_fields["cert_path"] = os.path.abspath(expanded_path)
 
+        # Handle API keys configuration
+        if "api_keys" in valid_fields:
+            api_keys_data = valid_fields["api_keys"]
+            if isinstance(api_keys_data, list):
+                api_keys = []
+                for i, key_data in enumerate(api_keys_data):
+                    if isinstance(key_data, dict):
+                        # If no name provided, auto-generate one
+                        if "name" not in key_data or not key_data["name"]:
+                            key_data["name"] = f"key_{i + 1}"
+                        api_keys.append(ApiKeyConfig(**key_data))
+                    elif isinstance(key_data, str):
+                        # Simple string format, use default weight and auto-generated name
+                        api_keys.append(
+                            ApiKeyConfig(key=key_data, weight=1.0, name=f"key_{i + 1}")
+                        )
+                    else:
+                        raise ValueError(f"Invalid API key configuration: {key_data}")
+                valid_fields["api_keys"] = api_keys
+            else:
+                raise ValueError("api_keys must be a list")
+
         return cls(**valid_fields)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
-        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+        result = {}
+        for k, v in self.__dict__.items():
+            if k.startswith("_"):
+                continue
+            if k == "api_keys" and isinstance(v, list):
+                # Convert ApiKeyConfig objects to dictionaries
+                result[k] = [
+                    {
+                        "key": key_config.key,
+                        "weight": key_config.weight,
+                        "name": key_config.name,
+                    }
+                    for key_config in v
+                ]
+            else:
+                result[k] = v
+        return result
 
     def validate(self) -> None:
         """Validate configuration."""
-        if not self.api_key:
-            raise ValueError("API key is required")
+        # Check if we have API keys configured
+        if not self.api_keys:
+            raise ValueError("At least one API key is required in api_keys")
+
+        # Validate individual API keys
+        for i, api_key_config in enumerate(self.api_keys):
+            if not isinstance(api_key_config, ApiKeyConfig):
+                raise ValueError(f"Invalid API key configuration at index {i}")
+
+            # Validate the API key config itself
+            try:
+                api_key_config.__post_init__()
+            except ValueError as e:
+                raise ValueError(f"API key validation failed at index {i}: {e}")
+
+        # Check for duplicate API key names
+        names = [key.name for key in self.api_keys if key.name]
+        if len(names) != len(set(names)):
+            raise ValueError("Duplicate API key names found")
+
+        # Validate URLs
         if not self.asksage_server_base_url:
             raise ValueError("AskSage server base URL is required")
         if not self.asksage_user_base_url:
             raise ValueError("AskSage user base URL is required")
+
+        # Validate URL format
+        if not self.asksage_server_base_url.startswith(("http://", "https://")):
+            raise ValueError(
+                "AskSage server base URL must start with http:// or https://"
+            )
+        if not self.asksage_user_base_url.startswith(("http://", "https://")):
+            raise ValueError(
+                "AskSage user base URL must start with http:// or https://"
+            )
+
+        # Validate timeout
+        if self.timeout_seconds <= 0:
+            raise ValueError("Timeout must be positive")
+
+    def get_api_keys(self) -> List[ApiKeyConfig]:
+        """Get configured API keys."""
+        return self.api_keys
 
 
 def load_config_from_file(config_path: str) -> Optional[AskSageConfig]:
@@ -191,8 +282,45 @@ def create_config_interactive() -> AskSageConfig:
         default_port=random_port,
     )
 
-    # Get API key
-    api_key = get_api_key("")
+    # Get API keys (support multiple)
+    api_keys = []
+    print("\nAPI Key Configuration:")
+    print("You can configure multiple API keys with different priority weights.")
+    print("Higher weights mean the key is more likely to be selected.")
+
+    while True:
+        print(f"\nConfiguring API key #{len(api_keys) + 1}:")
+
+        # Get API key
+        api_key = get_api_key("")
+
+        # Get weight (optional)
+        weight_input = input("Enter priority weight (default: 1.0): ").strip()
+        try:
+            weight = float(weight_input) if weight_input else 1.0
+            if weight <= 0:
+                print("Weight must be positive, using default 1.0")
+                weight = 1.0
+        except ValueError:
+            print("Invalid weight, using default 1.0")
+            weight = 1.0
+
+        # Get optional name (auto-generate if not provided)
+        name_input = input(
+            f"Enter optional name for this API key (default: key_{len(api_keys) + 1}): "
+        ).strip()
+        name = name_input if name_input else f"key_{len(api_keys) + 1}"
+
+        # Create API key config
+        api_key_config = ApiKeyConfig(key=api_key, weight=weight, name=name)
+        api_keys.append(api_key_config)
+
+        # Ask if user wants to add more keys
+        add_more = get_yes_no_input(
+            prompt="Add another API key? [y/N]: ", default=False
+        )
+        if not add_more:
+            break
 
     # Get certificate path
     cert_path = get_cert_path()
@@ -200,9 +328,10 @@ def create_config_interactive() -> AskSageConfig:
     # Get verbose setting
     verbose = get_yes_no_input(prompt="Enable verbose mode? [Y/n]: ")
 
+    # Create config with API keys
     config_data = AskSageConfig(
         port=port,
-        api_key=api_key,
+        api_keys=api_keys,
         cert_path=cert_path,
         verbose=verbose,
     )
@@ -211,5 +340,6 @@ def create_config_interactive() -> AskSageConfig:
     config_path = os.path.expanduser("~/.config/asksage_proxy/config.yaml")
     save_config(config_data, config_path)
     logger.info(f"Created new configuration at: {config_path}")
+    logger.info(f"Configured {len(api_keys)} API key(s) with load balancing")
 
     return config_data
