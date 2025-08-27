@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from aiohttp import web
 from loguru import logger
@@ -27,99 +27,6 @@ from ..types import (
 )
 
 DEFAULT_MODEL = "gpt-4o"
-
-
-def parse_tool_calls_from_response(
-    response_content: str,
-) -> Optional[List[ChatCompletionMessageToolCall]]:
-    """Parse tool calls from AskSage response content.
-
-    AskSage may return tool calls in various formats. This function attempts to
-    detect and parse them into OpenAI format.
-
-    Args:
-        response_content: The response content from AskSage
-
-    Returns:
-        List of tool calls if found, None otherwise
-    """
-    if not response_content:
-        return None
-
-    tool_calls = []
-
-    # Try to detect function call patterns in the response
-    # This is a heuristic approach since we need to see actual AskSage tool call responses
-
-    # Pattern 1: JSON-like function calls
-    import re
-
-    # Look for function call patterns like: function_name(arguments)
-    function_pattern = r"(\w+)\s*\(\s*([^)]*)\s*\)"
-    matches = re.findall(function_pattern, response_content)
-
-    for i, (func_name, args_str) in enumerate(matches):
-        # Skip common words that aren't function names
-        if func_name.lower() in [
-            "get",
-            "set",
-            "is",
-            "has",
-            "can",
-            "will",
-            "should",
-            "would",
-        ]:
-            continue
-
-        try:
-            # Try to parse arguments as JSON
-            if args_str.strip():
-                # Simple argument parsing - in real implementation you'd want more robust parsing
-                arguments = args_str.strip()
-                if not arguments.startswith("{"):
-                    # Convert simple arguments to JSON format
-                    arguments = f'{{"query": "{arguments}"}}'
-            else:
-                arguments = "{}"
-
-            tool_call = ChatCompletionMessageToolCall(
-                id=f"call_{uuid.uuid4().hex[:8]}",
-                function=Function(name=func_name, arguments=arguments),
-                type="function",
-            )
-            tool_calls.append(tool_call)
-
-        except Exception:
-            # Skip invalid function calls
-            continue
-
-    # Pattern 2: Look for explicit tool call JSON in response
-    try:
-        # Try to find JSON objects that look like tool calls
-        json_pattern = r'\{[^}]*"name"\s*:\s*"[^"]+"\s*[^}]*\}'
-        json_matches = re.findall(json_pattern, response_content)
-
-        for json_str in json_matches:
-            try:
-                parsed = json.loads(json_str)
-                if "name" in parsed:
-                    tool_call = ChatCompletionMessageToolCall(
-                        id=f"call_{uuid.uuid4().hex[:8]}",
-                        function=Function(
-                            name=parsed["name"],
-                            arguments=json.dumps(parsed.get("arguments", {})),
-                        ),
-                        type="function",
-                    )
-                    tool_calls.append(tool_call)
-            except json.JSONDecodeError:
-                continue
-
-    except Exception:
-        pass
-
-    return tool_calls if tool_calls else None
 
 
 def extract_text_from_content(content: Union[str, List[Dict[str, Any]]]) -> str:
@@ -269,8 +176,24 @@ async def transform_asksage_to_openai(
     if not response_content:
         response_content = ""
 
-    # Parse tool calls from response
-    tool_calls = parse_tool_calls_from_response(response_content)
+    # Get tool calls directly from AskSage response (they're already in OpenAI format)
+    tool_calls = asksage_response.get("tool_calls")
+    if tool_calls is None:
+        # Also check tool_calls_unified field as backup
+        tool_calls = asksage_response.get("tool_calls_unified")
+
+    # Convert to proper format if tool_calls is not empty
+    if tool_calls and len(tool_calls) > 0:
+        # Tool calls are already in OpenAI format, just ensure they're properly structured
+        formatted_tool_calls = []
+        for tool_call in tool_calls:
+            if isinstance(tool_call, dict):
+                formatted_tool_calls.append(ChatCompletionMessageToolCall(**tool_call))
+            else:
+                formatted_tool_calls.append(tool_call)
+        tool_calls = formatted_tool_calls
+    else:
+        tool_calls = None
 
     # Determine finish reason
     finish_reason = "tool_calls" if tool_calls else "stop"
