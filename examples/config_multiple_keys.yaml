@@ -3,7 +3,7 @@
 
 # Server settings
 host: "0.0.0.0"
-port: 8080
+port: 50733
 verbose: true
 
 # Multiple API keys with priority weights

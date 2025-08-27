@@ -21,7 +21,7 @@ You can configure multiple API keys in your `config.yaml` file:
 ```yaml
 # Server settings
 host: "0.0.0.0"
-port: 8080
+port: 50733
 verbose: true
 
 # Leave legacy api_key empty when using multiple keys
