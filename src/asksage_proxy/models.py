@@ -7,7 +7,6 @@ from typing import Any, Dict, Literal, Optional
 from loguru import logger
 from pydantic import BaseModel
 
-from .api_key_manager import ApiKeyManager
 from .client import AskSageClient
 from .config import AskSageConfig
 
@@ -39,14 +38,6 @@ class ModelRegistry:
         self._chat_models: Dict[str, AskSageModel] = {}
         self._embed_models: Dict[str, AskSageModel] = {}
         self._last_updated: Optional[datetime] = None
-
-        # Initialize API key manager
-        api_keys = config.get_api_keys()
-        if api_keys:
-            self.api_key_manager = ApiKeyManager(api_keys)
-        else:
-            self.api_key_manager = None
-            logger.warning("No API keys configured for ModelRegistry")
 
         # Default models as fallback
         self._default_chat_models = {
@@ -90,16 +81,8 @@ class ModelRegistry:
     async def initialize(self) -> None:
         """Initialize model registry by fetching from AskSage API."""
         try:
-            # Use the first available API key for model initialization
-            api_key = None
-            if self.api_key_manager:
-                api_key_config = self.api_key_manager.get_next_key()
-                api_key = api_key_config.key
-                logger.info(
-                    f"Using API key '{api_key_config.name or 'unnamed'}' for model initialization"
-                )
-
-            async with AskSageClient(self.config, api_key=api_key) as client:
+            # Use AskSageClient (it will automatically use config.api_key)
+            async with AskSageClient(self.config) as client:
                 models_response = await client.get_models()
                 self._parse_models(models_response)
                 self._last_updated = datetime.now()
