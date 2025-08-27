@@ -8,8 +8,10 @@ from typing import Optional
 from aiohttp import web
 from loguru import logger
 
+from .__init__ import __version__
 from .config import AskSageConfig, load_config
 from .endpoints.chat import chat_completions
+from .endpoints.extras import get_latest_pypi_version
 from .endpoints.models import get_models
 from .models import ModelRegistry
 
@@ -47,20 +49,38 @@ def setup_routes(app: web.Application) -> None:
     async def root_handler(request: web.Request) -> web.Response:
         return web.json_response(
             {
-                "message": "Welcome to AskSage Proxy API",
-                "version": "0.1.0",
-                "endpoints": [
-                    "/v1/models",
-                    "/v1/chat/completions",
-                    "/v1/completions",
-                    "/v1/embeddings",
-                ],
+                "message": "Welcome to the AskSage Proxy API! Documentation is available at https://raw.githubusercontent.com/Oaklight/asksage-proxy/refs/heads/master/README_en.md"
             }
         )
 
     # Health check endpoint
     async def health_handler(request: web.Request) -> web.Response:
         return web.json_response({"status": "healthy"})
+
+    # Version endpoint
+    async def version_handler(request: web.Request) -> web.Response:
+        logger.info("/version")
+        latest = await get_latest_pypi_version()
+        update_available = latest and latest != __version__
+
+        response = {
+            "version": __version__,
+            "latest": latest,
+            "up_to_date": not update_available,
+            "pypi": "https://pypi.org/project/asksage-proxy/",
+        }
+
+        if update_available:
+            response.update(
+                {
+                    "message": f"New version {latest} available",
+                    "install_command": "pip install --upgrade asksage-proxy",
+                }
+            )
+        else:
+            response["message"] = "You're using the latest version"
+
+        return web.json_response(response)
 
     # 404 handler for /v1
     async def v1_handler(request: web.Request) -> web.Response:
@@ -73,6 +93,7 @@ def setup_routes(app: web.Application) -> None:
     # Add routes
     app.router.add_get("/", root_handler)
     app.router.add_get("/health", health_handler)
+    app.router.add_get("/version", version_handler)
     app.router.add_get("/v1", v1_handler)
 
     # OpenAI compatible endpoints
