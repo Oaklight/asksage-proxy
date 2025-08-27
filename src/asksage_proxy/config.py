@@ -12,13 +12,8 @@ from typing import Any, Dict, List, Optional
 import yaml
 from loguru import logger
 
-from .utils import (
-    get_api_key,
-    get_cert_path,
-    get_random_port,
-    get_user_port_choice,
-    get_yes_no_input,
-)
+from .utils.config_helpers import get_api_key, get_cert_path
+from .utils.misc import get_random_port, get_user_port_choice, get_yes_no_input
 
 
 @dataclass
@@ -588,7 +583,7 @@ def create_config_interactive() -> AskSageConfig:
 
         # Ask if user wants to add more keys
         add_more = get_yes_no_input(
-            prompt="Add another API key? [y/N]: ", default=False
+            prompt="Add another API key? [y/N]: ", default_choice="n"
         )
         if not add_more:
             break
@@ -597,7 +592,7 @@ def create_config_interactive() -> AskSageConfig:
     cert_path = get_cert_path()
 
     # Get verbose setting
-    verbose = get_yes_no_input(prompt="Enable verbose mode? [Y/n]: ")
+    verbose = get_yes_no_input(prompt="Enable verbose mode? [Y/n]: ", default_choice="y")
 
     # Create config with API keys
     config_data = AskSageConfig(
