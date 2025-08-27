@@ -4,10 +4,8 @@ import asyncio
 import json
 import time
 import uuid
-from http import HTTPStatus
 from typing import Any, Dict, List, Optional, Union
 
-import aiohttp
 from aiohttp import web
 from loguru import logger
 
@@ -18,13 +16,109 @@ from ..types import (
     ChatCompletion,
     ChatCompletionChunk,
     ChatCompletionMessage,
+    ChatCompletionMessageToolCall,
     ChoiceDelta,
+    ChoiceDeltaToolCall,
     CompletionUsage,
+    Function,
     NonStreamChoice,
     StreamChoice,
 )
 
 DEFAULT_MODEL = "gpt-4o"
+
+
+def parse_tool_calls_from_response(
+    response_content: str,
+) -> Optional[List[ChatCompletionMessageToolCall]]:
+    """Parse tool calls from AskSage response content.
+
+    AskSage may return tool calls in various formats. This function attempts to
+    detect and parse them into OpenAI format.
+
+    Args:
+        response_content: The response content from AskSage
+
+    Returns:
+        List of tool calls if found, None otherwise
+    """
+    if not response_content:
+        return None
+
+    tool_calls = []
+
+    # Try to detect function call patterns in the response
+    # This is a heuristic approach since we need to see actual AskSage tool call responses
+
+    # Pattern 1: JSON-like function calls
+    import re
+
+    # Look for function call patterns like: function_name(arguments)
+    function_pattern = r"(\w+)\s*\(\s*([^)]*)\s*\)"
+    matches = re.findall(function_pattern, response_content)
+
+    for i, (func_name, args_str) in enumerate(matches):
+        # Skip common words that aren't function names
+        if func_name.lower() in [
+            "get",
+            "set",
+            "is",
+            "has",
+            "can",
+            "will",
+            "should",
+            "would",
+        ]:
+            continue
+
+        try:
+            # Try to parse arguments as JSON
+            if args_str.strip():
+                # Simple argument parsing - in real implementation you'd want more robust parsing
+                arguments = args_str.strip()
+                if not arguments.startswith("{"):
+                    # Convert simple arguments to JSON format
+                    arguments = f'{{"query": "{arguments}"}}'
+            else:
+                arguments = "{}"
+
+            tool_call = ChatCompletionMessageToolCall(
+                id=f"call_{uuid.uuid4().hex[:8]}",
+                function=Function(name=func_name, arguments=arguments),
+                type="function",
+            )
+            tool_calls.append(tool_call)
+
+        except Exception:
+            # Skip invalid function calls
+            continue
+
+    # Pattern 2: Look for explicit tool call JSON in response
+    try:
+        # Try to find JSON objects that look like tool calls
+        json_pattern = r'\{[^}]*"name"\s*:\s*"[^"]+"\s*[^}]*\}'
+        json_matches = re.findall(json_pattern, response_content)
+
+        for json_str in json_matches:
+            try:
+                parsed = json.loads(json_str)
+                if "name" in parsed:
+                    tool_call = ChatCompletionMessageToolCall(
+                        id=f"call_{uuid.uuid4().hex[:8]}",
+                        function=Function(
+                            name=parsed["name"],
+                            arguments=json.dumps(parsed.get("arguments", {})),
+                        ),
+                        type="function",
+                    )
+                    tool_calls.append(tool_call)
+            except json.JSONDecodeError:
+                continue
+
+    except Exception:
+        pass
+
+    return tool_calls if tool_calls else None
 
 
 async def transform_openai_to_asksage(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -89,12 +183,19 @@ async def transform_openai_to_asksage(data: Dict[str, Any]) -> Dict[str, Any]:
         else:
             asksage_payload["limit_references"] = 5
 
-    # Handle tools (function calling) - for now, we'll pass them as JSON strings
+    # Handle tools (function calling)
     if "tools" in data:
         asksage_payload["tools"] = json.dumps(data["tools"])
 
     if "tool_choice" in data:
-        asksage_payload["tool_choice"] = json.dumps(data["tool_choice"])
+        tool_choice = data["tool_choice"]
+        # Handle different tool_choice formats
+        if isinstance(tool_choice, str):
+            # "auto", "none", or function name
+            asksage_payload["tool_choice"] = tool_choice
+        else:
+            # Object format like {"type": "function", "function": {"name": "get_weather"}}
+            asksage_payload["tool_choice"] = json.dumps(tool_choice)
 
     # Handle reasoning effort (o1 models)
     if "reasoning_effort" in data:
@@ -149,6 +250,12 @@ async def transform_asksage_to_openai(
     if not response_content:
         response_content = ""
 
+    # Parse tool calls from response
+    tool_calls = parse_tool_calls_from_response(response_content)
+
+    # Determine finish reason
+    finish_reason = "tool_calls" if tool_calls else "stop"
+
     # Calculate token usage (simplified - in real implementation you'd want proper tokenization)
     completion_tokens = len(response_content.split()) if response_content else 0
     total_tokens = prompt_tokens + completion_tokens
@@ -161,6 +268,19 @@ async def transform_asksage_to_openai(
 
     if is_streaming:
         # Create streaming response chunk
+        delta = ChoiceDelta(content=response_content)
+        if tool_calls:
+            # Convert tool calls to streaming format
+            delta.tool_calls = [
+                ChoiceDeltaToolCall(
+                    index=i,
+                    id=tool_call.id,
+                    function=tool_call.function,
+                    type=tool_call.type,
+                )
+                for i, tool_call in enumerate(tool_calls)
+            ]
+
         openai_response = ChatCompletionChunk(
             id=str(uuid.uuid4().hex),
             created=create_timestamp,
@@ -168,15 +288,17 @@ async def transform_asksage_to_openai(
             choices=[
                 StreamChoice(
                     index=0,
-                    delta=ChoiceDelta(
-                        content=response_content,
-                    ),
-                    finish_reason="stop",
+                    delta=delta,
+                    finish_reason=finish_reason,
                 )
             ],
         )
     else:
         # Create non-streaming response
+        message = ChatCompletionMessage(content=response_content)
+        if tool_calls:
+            message.tool_calls = tool_calls
+
         openai_response = ChatCompletion(
             id=str(uuid.uuid4().hex),
             created=create_timestamp,
@@ -184,10 +306,8 @@ async def transform_asksage_to_openai(
             choices=[
                 NonStreamChoice(
                     index=0,
-                    message=ChatCompletionMessage(
-                        content=response_content,
-                    ),
-                    finish_reason="stop",
+                    message=message,
+                    finish_reason=finish_reason,
                 )
             ],
             usage=usage,
