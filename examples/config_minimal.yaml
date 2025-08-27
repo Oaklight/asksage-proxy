@@ -1,0 +1,18 @@
+# Minimal configuration with single API key
+# This demonstrates the simplest possible configuration
+
+# Server settings
+host: "0.0.0.0"
+port: 8080
+verbose: true
+
+# Single API key (minimal format)
+api_keys:
+  - key: "your-api-key-here"
+
+# AskSage API settings
+asksage_server_base_url: "https://api.asksage.anl.gov/server"
+asksage_user_base_url: "https://api.asksage.anl.gov/user"
+
+# Timeout settings
+timeout_seconds: 30.0

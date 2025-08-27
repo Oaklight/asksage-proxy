@@ -1,0 +1,23 @@
+# Simple configuration with two API keys (equal weight)
+# This demonstrates basic round-robin load balancing
+
+# Server settings
+host: "0.0.0.0"
+port: 8080
+verbose: true
+
+# Multiple API keys with equal weights (round-robin)
+api_keys:
+  - key: "api-key-1"
+    weight: 1.0
+    name: "key1"
+  - key: "api-key-2"
+    weight: 1.0
+    name: "key2"
+
+# AskSage API settings
+asksage_server_base_url: "https://api.asksage.anl.gov/server"
+asksage_user_base_url: "https://api.asksage.anl.gov/user"
+
+# Timeout settings
+timeout_seconds: 30.0
