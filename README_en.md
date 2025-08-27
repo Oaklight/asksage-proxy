@@ -14,13 +14,15 @@ pip install asksage-proxy # install the package
 asksage-proxy # run the proxy
 ```
 
+**Note:** Query with images (e.g., OpenAI vision-style messages with image URLs or base64) is currently **not supported**. We welcome PRs or suggestions to help implement this feature.
+
 Function calling is available for Chat Completions endpoint starting from `v0.1.0`.
 
 **New in v0.1.0+**: Multi-API key support with intelligent load balancing for improved reliability and rate limit management.
 
 ## NOTICE OF USAGE
 
-The machine or server making API calls to AskSage must be connected to the Argonne internal network or through a VPN on an Argonne-managed computer if you are working off-site. Your instance of the asksage proxy should always be on-premise at an Argonne machine. The software is provided "as is," without any warranties. By using this software, you accept that the authors, contributors, and affiliated organizations will not be liable for any damages or issues arising from its use. You are solely responsible for ensuring the software meets your requirements.
+The machine making API calls to AskSage doesn't need to be connected to Argonne network. However, the service requires a certificate (obtained via SSO-protected Box sharing link) and API key (setup via the AskSage Dashboard, which is also SSO-protected). The software is provided "as is," without any warranties. By using this software, you accept that the authors, contributors, and affiliated organizations will not be liable for any damages or issues arising from its use. You are solely responsible for ensuring the software meets your requirements.
 
 - [Notice of Usage](#notice-of-usage)
 - [Deployment](#deployment)
