@@ -380,10 +380,11 @@ These endpoints convert responses from the AskSage API to be compatible with Ope
 
 #### Not OpenAI Compatible
 
-These endpoints interact directly with the AskSage API and do not convert responses to OpenAI's format:
+These are proxy server endpoints that provide server information and health status (they do not query the AskSage API):
 
 - **`/`**: Root endpoint with API information.
 - **`/health`**: Health check endpoint. Returns `200 OK` if the server is running.
+- **`/version`**: Version information endpoint. Returns current and latest available versions.
 
 #### Planned Endpoints
 
