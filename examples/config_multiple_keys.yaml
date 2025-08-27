@@ -1,0 +1,29 @@
+# Example configuration with multiple API keys and load balancing
+# This demonstrates the new API key load balancing feature
+
+# Server settings
+host: "0.0.0.0"
+port: 8080
+verbose: true
+
+# Multiple API keys with priority weights
+api_keys:
+  - key: "your-primary-api-key-here"
+    weight: 3.0
+    name: "primary"
+  - key: "your-secondary-api-key-here"
+    weight: 2.0
+    name: "secondary"
+  - key: "your-backup-api-key-here"
+    weight: 1.0
+    name: "backup"
+
+# AskSage API settings
+asksage_server_base_url: "https://api.asksage.anl.gov/server"
+asksage_user_base_url: "https://api.asksage.anl.gov/user"
+
+# Certificate path (optional)
+cert_path: "./anl_provided/asksage_anl_gov.pem"
+
+# Timeout settings
+timeout_seconds: 30.0
