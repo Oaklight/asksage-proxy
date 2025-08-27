@@ -42,6 +42,14 @@ class AskSageConfig:
         valid_fields = {
             k: v for k, v in config_dict.items() if k in cls.__annotations__
         }
+
+        # Convert certificate path to absolute path if provided
+        if "cert_path" in valid_fields and valid_fields["cert_path"]:
+            cert_path = valid_fields["cert_path"]
+            # Expand user home directory and convert to absolute path
+            expanded_path = os.path.expanduser(cert_path)
+            valid_fields["cert_path"] = os.path.abspath(expanded_path)
+
         return cls(**valid_fields)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -159,8 +167,15 @@ def save_config(config: AskSageConfig, config_path: str) -> None:
     path = Path(config_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Ensure certificate path is absolute before saving
+    config_dict = config.to_dict()
+    if config_dict.get("cert_path"):
+        cert_path = config_dict["cert_path"]
+        expanded_path = os.path.expanduser(cert_path)
+        config_dict["cert_path"] = os.path.abspath(expanded_path)
+
     with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(config.to_dict(), f, default_flow_style=False)
+        yaml.dump(config_dict, f, default_flow_style=False)
 
     logger.info(f"Configuration saved to {config_path}")
 
