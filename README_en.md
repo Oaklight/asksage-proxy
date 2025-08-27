@@ -242,9 +242,9 @@ All paths are normalized to absolute paths when saved to ensure consistency rega
 ### `asksage-proxy` CLI Available Options
 
 ```bash
-$ asksage-proxy -h
-usage: asksage-proxy [-h] [--host HOST] [--port PORT] [--verbose]
-                     [--show] [--edit] [config]
+$ asksage-proxy --help
+usage: asksage-proxy [-h] [--host HOST] [--port PORT] [--verbose] [--show] [--edit]
+                     [config]
 
 AskSage Proxy - OpenAI-compatible proxy for AskSage API
 
@@ -253,11 +253,17 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --host HOST, -H HOST  Host address to bind the server to
-  --port PORT, -p PORT  Port number to bind the server to
+  --host HOST, -H HOST  Host to bind to (overrides config)
+  --port PORT, -p PORT  Port to bind to (overrides config)
   --verbose, -v         Enable verbose logging
   --show, -s            Show current configuration and exit
   --edit, -e            Edit configuration file with system default editor
+
+Examples:
+  asksage-proxy                          # Run proxy server
+  asksage-proxy --show                   # Show current configuration
+  asksage-proxy --edit                   # Edit configuration file
+  asksage-proxy config.yaml --host 0.0.0.0 --port 8080
 ```
 
 ### Management Utilities
