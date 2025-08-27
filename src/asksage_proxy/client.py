@@ -1,7 +1,6 @@
 """AskSage API client for proxy operations."""
 
 import os
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 import aiohttp
@@ -31,21 +30,16 @@ class AskSageClient:
 
         ssl_context = ssl.create_default_context()
 
-        # Use the ANL provided certificate
+        # Use the configured certificate path
         cert_path = self.config.cert_path
-        if not cert_path:
-            # Default to the ANL provided certificate
-            cert_path = str(
-                Path(__file__).parent.parent.parent
-                / "anl_provided"
-                / "asksage_anl_gov.pem"
-            )
 
         if cert_path and os.path.exists(cert_path):
             ssl_context.load_verify_locations(cert_path)
             logger.info(f"Using certificate: {cert_path}")
         else:
-            logger.warning("No certificate found, using default SSL context")
+            if cert_path:
+                logger.warning(f"Certificate file not found: {cert_path}")
+            logger.warning("No valid certificate found, using default SSL context")
 
         self._session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=self.config.timeout_seconds),

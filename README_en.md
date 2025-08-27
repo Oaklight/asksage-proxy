@@ -92,7 +92,7 @@ api_keys:
   - key: "your-api-key-here"
 asksage_server_base_url: "https://api.asksage.anl.gov/server"
 asksage_user_base_url: "https://api.asksage.anl.gov/user"
-cert_path: "./anl_provided/asksage_anl_gov.pem"
+cert_path: "/path/to/your/asksage_anl_gov.pem"
 timeout_seconds: 30.0
 ```
 
@@ -114,7 +114,7 @@ api_keys:
     name: "backup"
 asksage_server_base_url: "https://api.asksage.anl.gov/server"
 asksage_user_base_url: "https://api.asksage.anl.gov/user"
-cert_path: "./anl_provided/asksage_anl_gov.pem"
+cert_path: "/path/to/your/asksage_anl_gov.pem"
 timeout_seconds: 30.0
 ```
 
@@ -149,7 +149,7 @@ When running without an existing config file:
 2. Automatically selects a random available port (can be overridden)
 3. Prompts for:
    - Multiple AskSage API keys with priority weights (supports lab key pooling)
-   - Certificate file path (defaults to bundled certificate, supports relative paths like `./cert.pem` or `~/cert.pem`)
+   - Certificate file path (you must provide your own certificate file, supports relative paths like `./cert.pem` or `~/cert.pem`)
    - Verbose mode preference
 4. Validates connectivity to configured URLs
 5. Shows the generated config in a formatted display for review before proceeding
@@ -178,7 +178,7 @@ Enter priority weight (default: 1.0): 1.0
 Enter optional name for this API key (default: key_2): backup
 Add another API key? [y/N]: n
 
-Enter certificate path: ./anl_provided/asksage_anl_gov.pem
+Enter certificate path: /path/to/your/asksage_anl_gov.pem
 Enable verbose mode? [Y/n]
 Created new configuration at: /home/your_username/.config/asksage_proxy/config.yaml
 Configured 2 API key(s) with load balancing
@@ -196,7 +196,7 @@ Configured 2 API key(s) with load balancing
 | `api_key`                 | Legacy single API key (deprecated, use `api_keys` instead)                        | (Backward compatibility only)        |
 | `asksage_server_base_url` | AskSage Server API base URL                                                       | `https://api.asksage.anl.gov/server` |
 | `asksage_user_base_url`   | AskSage User API base URL                                                         | `https://api.asksage.anl.gov/user`   |
-| `cert_path`               | Path to SSL certificate file (relative paths automatically converted to absolute) | `./anl_provided/asksage_anl_gov.pem` |
+| `cert_path`               | Path to SSL certificate file (relative paths automatically converted to absolute) | (Required - no default)              |
 | `timeout_seconds`         | Request timeout in seconds                                                        | `30.0`                               |
 
 #### API Keys Configuration

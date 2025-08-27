@@ -22,8 +22,8 @@ api_keys:
 asksage_server_base_url: "https://api.asksage.anl.gov/server"
 asksage_user_base_url: "https://api.asksage.anl.gov/user"
 
-# Certificate path (optional)
-cert_path: "./anl_provided/asksage_anl_gov.pem"
+# Certificate path (required - provide your own certificate file)
+cert_path: "/path/to/your/asksage_anl_gov.pem"
 
 # Timeout settings
 timeout_seconds: 30.0
