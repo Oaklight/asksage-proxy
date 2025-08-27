@@ -116,7 +116,7 @@ When running without an existing config file:
 2. Automatically selects a random available port (can be overridden)
 3. Prompts for:
    - Your AskSage API key (or uses environment variable)
-   - Certificate file path (defaults to bundled certificate)
+   - Certificate file path (defaults to bundled certificate, supports relative paths like `./cert.pem` or `~/cert.pem`)
    - Verbose mode preference
 4. Validates connectivity to configured URLs
 5. Shows the generated config in a formatted display for review before proceeding
@@ -151,16 +151,32 @@ Current configuration:
 
 ### Configuration Options Reference
 
-| Option                    | Description                                                  | Default                              |
-| ------------------------- | ------------------------------------------------------------ | ------------------------------------ |
-| `host`                    | Host address to bind the server to                           | `0.0.0.0`                            |
-| `port`                    | Application port (random available port selected by default) | randomly assigned                    |
-| `verbose`                 | Debug logging                                                | `true`                               |
-| `api_key`                 | AskSage API key (use environment variable ASK_SAGE_API)      | (Set during setup or via env var)    |
-| `asksage_server_base_url` | AskSage Server API base URL                                  | `https://api.asksage.anl.gov/server` |
-| `asksage_user_base_url`   | AskSage User API base URL                                    | `https://api.asksage.anl.gov/user`   |
-| `cert_path`               | Path to SSL certificate file                                 | `./anl_provided/asksage_anl_gov.pem` |
-| `timeout_seconds`         | Request timeout in seconds                                   | `30.0`                               |
+| Option                    | Description                                                                       | Default                              |
+| ------------------------- | --------------------------------------------------------------------------------- | ------------------------------------ |
+| `host`                    | Host address to bind the server to                                                | `0.0.0.0`                            |
+| `port`                    | Application port (random available port selected by default)                      | randomly assigned                    |
+| `verbose`                 | Debug logging                                                                     | `true`                               |
+| `api_key`                 | AskSage API key (use environment variable ASK_SAGE_API)                           | (Set during setup or via env var)    |
+| `asksage_server_base_url` | AskSage Server API base URL                                                       | `https://api.asksage.anl.gov/server` |
+| `asksage_user_base_url`   | AskSage User API base URL                                                         | `https://api.asksage.anl.gov/user`   |
+| `cert_path`               | Path to SSL certificate file (relative paths automatically converted to absolute) | `./anl_provided/asksage_anl_gov.pem` |
+| `timeout_seconds`         | Request timeout in seconds                                                        | `30.0`                               |
+
+**Note on Certificate Paths**: The `cert_path` configuration supports various path formats:
+
+- **Relative paths**: `./cert.pem`, `../certs/cert.pem` - automatically converted to absolute paths
+- **Tilde paths**: `~/cert.pem` - expanded to full home directory path
+- **Absolute paths**: `/full/path/to/cert.pem` - used as-is
+
+All paths are normalized to absolute paths when saved to ensure consistency regardless of the working directory.
+
+**Note on Certificate Paths**: The `cert_path` configuration supports various path formats:
+
+- **Relative paths**: `./cert.pem`, `../certs/cert.pem` - automatically converted to absolute paths
+- **Tilde paths**: `~/cert.pem` - expanded to full home directory path
+- **Absolute paths**: `/full/path/to/cert.pem` - used as-is
+
+All paths are normalized to absolute paths when saved to ensure consistency regardless of the working directory.
 
 ### `asksage-proxy` CLI Available Options
 
@@ -272,7 +288,6 @@ The tool calls (function calling) interface is available starting from version v
 #### Tool Call Examples
 
 For usage details, refer to the [OpenAI documentation](https://platform.openai.com/docs/guides/function-calling).
-
 
 ## Bug Reports and Contributions
 
