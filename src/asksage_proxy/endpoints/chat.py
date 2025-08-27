@@ -122,6 +122,33 @@ def parse_tool_calls_from_response(
     return tool_calls if tool_calls else None
 
 
+def extract_text_from_content(content: Union[str, List[Dict[str, Any]]]) -> str:
+    """Extract text content from OpenAI message content.
+
+    OpenAI content can be either:
+    - A simple string
+    - A list of content parts like [{'type': 'text', 'text': '...'}, ...]
+
+    Args:
+        content: The content field from an OpenAI message
+
+    Returns:
+        Extracted text as a single string
+    """
+    if isinstance(content, str):
+        return content
+    elif isinstance(content, list):
+        # Extract text from all content parts
+        text_parts = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text_parts.append(part.get("text", ""))
+        return "\n".join(text_parts)
+    else:
+        # Fallback for unexpected content types
+        return str(content) if content else ""
+
+
 async def transform_openai_to_asksage(data: Dict[str, Any]) -> Dict[str, Any]:
     """Transform OpenAI chat completion request to AskSage query format.
 
@@ -142,14 +169,17 @@ async def transform_openai_to_asksage(data: Dict[str, Any]) -> Dict[str, Any]:
         role = message.get("role")
         content = message.get("content", "")
 
+        # Extract text content properly handling both string and list formats
+        text_content = extract_text_from_content(content)
+
         if role == "system":
-            system_prompt = content
+            system_prompt = text_content
         elif role == "user":
-            user_messages.append(content)
+            user_messages.append(text_content)
         elif role == "assistant":
             # For conversation history, we might need to handle this differently
             # For now, we'll include it in the message context
-            user_messages.append(f"Assistant: {content}")
+            user_messages.append(f"Assistant: {text_content}")
 
     # Combine user messages into a single message
     if len(user_messages) == 1:
