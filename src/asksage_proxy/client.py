@@ -13,8 +13,15 @@ from .config import AskSageConfig
 class AskSageClient:
     """AskSage API client using direct API key authentication (simplified approach)."""
 
-    def __init__(self, config: AskSageConfig):
+    def __init__(self, config: AskSageConfig, api_key: Optional[str] = None):
+        """Initialize AskSage client.
+
+        Args:
+            config: AskSage configuration
+            api_key: Specific API key to use. If None, uses config.api_key
+        """
         self.config = config
+        self.api_key = api_key or config.api_key
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def __aenter__(self):
@@ -59,7 +66,7 @@ class AskSageClient:
 
         url = f"{self.config.asksage_server_base_url}/get-models"
         headers = {
-            "x-access-tokens": self.config.api_key,
+            "x-access-tokens": self.api_key,
             "Content-Type": "application/json",
         }
 
@@ -80,7 +87,7 @@ class AskSageClient:
 
         url = f"{self.config.asksage_server_base_url}/query"
         headers = {
-            "x-access-tokens": self.config.api_key,
+            "x-access-tokens": self.api_key,
             "Content-Type": "application/json",
         }
 
