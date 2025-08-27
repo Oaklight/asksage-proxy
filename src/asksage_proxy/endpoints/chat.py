@@ -533,14 +533,8 @@ async def chat_completions(
         create_timestamp = int(time.time())
         stream = data.get("stream", False)
 
-        # Get API key from the model registry's API key manager
-        api_key = None
-        if model_registry.api_key_manager:
-            api_key_config = model_registry.api_key_manager.get_next_key()
-            api_key = api_key_config.key
-            logger.info(
-                f"Using API key '{api_key_config.name or 'unnamed'}' for chat request"
-            )
+        # Get API key from the config
+        api_key = config.api_key
 
         # Create AskSage client with selected API key
         async with AskSageClient(config, api_key=api_key) as client:
