@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asksage-proxy"
+version = "0.1.0"
+authors = [{ name = "Peng Ding", email = "oaklight@gmx.com" }]
+description = "Proxy server to AskSage API, OpenAI format compatible"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "aiohttp>=3.12.2",
+    "loguru>=0.7.3",
+    "PyYAML>=6.0.2",
+    "pydantic>=2.11.7",
+    "tqdm>=4.67.1",
+    "packaging>=25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "dotenv>=0.9.9",
+    "openai>=1.79.0",
+    "pyright>=1.1.402",
+    "build>=1.2.2.post1",
+    "twine>=6.1.0",
+    "httpx>=0.28.1",
+    "requests>=2.25.1",
+]
+
+[project.urls]
+Documentation = "https://github.com/Oaklight/argo-openai-proxy#readme"
+Repository = "https://github.com/Oaklight/argo-openai-proxy"
+Issuses = "https://github.com/Oaklight/argo-openai-proxy/issues"
+
+[project.scripts]
+asksage-proxy = "asksage_proxy.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"asksage_proxy" = ["py.typed"]
