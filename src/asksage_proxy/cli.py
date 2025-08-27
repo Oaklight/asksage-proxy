@@ -82,7 +82,7 @@ def open_in_editor(config_path: Optional[str] = None) -> None:
             # Create a basic config template
             template_config = AskSageConfig(
                 host="0.0.0.0",
-                port=8080,
+                port=50733,
                 api_key="",  # Will use environment variable
             )
             save_config(template_config, str(default_path))
@@ -134,7 +134,7 @@ Examples:
   asksage-proxy                          # Run proxy server
   asksage-proxy --show                   # Show current configuration
   asksage-proxy --edit                   # Edit configuration file
-  asksage-proxy config.yaml --host 0.0.0.0 --port 8080
+  asksage-proxy config.yaml --host 0.0.0.0 --port 50733
         """,
     )
 

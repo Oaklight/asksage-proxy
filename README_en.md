@@ -86,7 +86,7 @@ The application uses `config.yaml` for configuration. Here are examples for diff
 
 ```yaml
 host: "0.0.0.0"
-port: 8080
+port: 50733
 verbose: true
 api_keys:
   - key: "your-api-key-here"
@@ -100,7 +100,7 @@ timeout_seconds: 30.0
 
 ```yaml
 host: "0.0.0.0"
-port: 8080
+port: 50733
 verbose: true
 api_keys:
   - key: "your-primary-api-key"
@@ -278,7 +278,7 @@ The following options help manage the configuration file:
 # Example usage:
 asksage-proxy --edit  # Edit config file
 asksage-proxy --show  # Show current config
-asksage-proxy --host 0.0.0.0 --port 8080  # Override config settings
+asksage-proxy --host 0.0.0.0 --port 50733  # Override config settings
 ```
 
 ## API Key Load Balancing
@@ -396,7 +396,7 @@ To see the available models, start the proxy and check the models endpoint:
 asksage-proxy
 
 # In another terminal, check available models
-curl http://localhost:8080/v1/models
+curl http://localhost:50733/v1/models
 ```
 
 Or using the OpenAI client:
@@ -405,7 +405,7 @@ Or using the OpenAI client:
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:8080/v1",
+    base_url="http://localhost:50733/v1",
     api_key="dummy"
 )
 

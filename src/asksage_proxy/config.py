@@ -259,7 +259,7 @@ class AskSageConfig:
 
     # Server settings
     host: str = "0.0.0.0"
-    port: int = 8080
+    port: int = 50733
     verbose: bool = True
 
     # AskSage API settings
