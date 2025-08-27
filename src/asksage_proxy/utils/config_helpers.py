@@ -9,37 +9,6 @@ CERTIFICATE_URL = "https://anl.app.box.com/s/lfdj6bjldrp7oorfjazrqjsswu6n0nrw"
 API_KEY_URL = "https://docs.asksage.ai/docs/api-documentation/api-documentation.html#creating-an-api-key"
 
 
-def get_valid_email(email: str = "") -> str:
-    """
-    Helper to get a valid ANL email through interactive input.
-    Ensures email is not empty and contains '@anl.gov'.
-
-    Args:
-        email (str): Pre-existing email to validate
-
-    Returns:
-        str: Validated email
-    """
-    is_valid = False
-    while not is_valid:
-        email = (
-            email.strip().lower() if email else input("Enter your ANL email: ").strip()
-        )
-
-        if not email:
-            print("Email cannot be empty.")
-            email = ""
-            continue
-        if "@anl.gov" not in email.lower():
-            print("Invalid email: Must be an ANL email (@anl.gov).")
-            email = ""
-            continue
-
-        is_valid = True
-
-    return email
-
-
 def get_api_key(api_key: str = "") -> str:
     """
     Helper to get a valid API key through interactive input.

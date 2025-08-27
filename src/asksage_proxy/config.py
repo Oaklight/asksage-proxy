@@ -14,7 +14,6 @@ from .utils import (
     get_cert_path,
     get_random_port,
     get_user_port_choice,
-    get_valid_email,
     get_yes_no_input,
 )
 
@@ -29,7 +28,6 @@ class AskSageConfig:
     verbose: bool = True
 
     # AskSage API settings
-    anl_email: str = ""
     api_key: str = ""
     asksage_server_base_url: str = "https://api.asksage.anl.gov/server"
     asksage_user_base_url: str = "https://api.asksage.anl.gov/user"
@@ -52,8 +50,6 @@ class AskSageConfig:
 
     def validate(self) -> None:
         """Validate configuration."""
-        if not self.anl_email:
-            raise ValueError("ANL email is required")
         if not self.api_key:
             raise ValueError("API key is required")
         if not self.asksage_server_base_url:
@@ -180,9 +176,6 @@ def create_config_interactive() -> AskSageConfig:
         default_port=random_port,
     )
 
-    # Get ANL email
-    anl_email = get_valid_email()
-
     # Get API key
     api_key = get_api_key("")
 
@@ -194,7 +187,6 @@ def create_config_interactive() -> AskSageConfig:
 
     config_data = AskSageConfig(
         port=port,
-        anl_email=anl_email,
         api_key=api_key,
         cert_path=cert_path,
         verbose=verbose,
