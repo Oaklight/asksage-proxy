@@ -85,12 +85,12 @@ class AskSageClient:
             "Content-Type": "application/json",
         }
 
-        logger.info(f"Sending request to {url}")
-        logger.info(f"Payload: {payload}")
+        logger.debug(f"Sending request to {url}")
+        logger.debug(f"Payload: {payload}")
 
         # Use JSON payload (simpler approach)
         async with self._session.post(url, headers=headers, json=payload) as response:
-            logger.info(f"Response status: {response.status}")
+            logger.debug(f"Response status: {response.status}")
 
             if response.status != 200:
                 response_text = await response.text()
@@ -99,7 +99,7 @@ class AskSageClient:
 
             try:
                 data = await response.json()
-                logger.info(f"Response data: {data}")
+                logger.debug(f"Response data: {data}")
                 return data
             except Exception as e:
                 response_text = await response.text()
