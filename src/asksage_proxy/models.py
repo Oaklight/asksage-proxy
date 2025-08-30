@@ -52,9 +52,13 @@ async def __validate_models(
                     # Simple test query to save tokens
                     test_payload = {
                         "model": model_id,
-                        "query": "hi",
+                        "message": "hi",
                         "max_tokens": 10,
-                        "temperature": 0.1,
+                        "temperature": 0.0,
+                        "persona": "default",
+                        "dataset": "all",
+                        "live": 0,
+                        "limit_references": 0,
                     }
 
                     response = await client.query(test_payload)
