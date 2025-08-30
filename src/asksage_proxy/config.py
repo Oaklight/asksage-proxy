@@ -15,6 +15,21 @@ from loguru import logger
 from .utils.config_helpers import get_api_key, get_cert_path
 from .utils.misc import get_random_port, get_user_port_choice, get_yes_no_input
 
+# Path constants - centralized configuration for all file paths
+PATHS_TO_CHECK = [
+    "~/.config/asksage_proxy/config.yaml",
+    "./config.yaml",
+    "~/.asksage_proxy/config.yaml",
+]
+
+# Default config directory and file paths
+DEFAULT_CONFIG_DIR = Path.home() / ".config" / "asksage_proxy"
+DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.yaml"
+AVAILABLE_MODELS_PATH = DEFAULT_CONFIG_DIR / "available_models.json"
+
+# File extensions
+YAML_EXTENSIONS = [".yaml", ".yml"]
+
 
 @dataclass
 class ApiKeyConfig:
@@ -431,10 +446,7 @@ def load_config_from_file(config_path: str) -> Optional[AskSageConfig]:
 
     try:
         with open(path, "r", encoding="utf-8") as f:
-            if path.suffix.lower() in [".yaml", ".yml"]:
-                config_dict = yaml.safe_load(f)
-            else:
-                config_dict = json.load(f)
+            config_dict = yaml.safe_load(f)
 
         return AskSageConfig.from_dict(config_dict)
     except Exception as e:
@@ -453,11 +465,7 @@ def load_config(config_path: Optional[str] = None) -> AskSageConfig:
     config_file_used = None
 
     # Default config paths to try (in order of preference)
-    default_paths = [
-        "~/.config/asksage_proxy/config.yaml",
-        "./config.yaml",
-        "./asksage_proxy_config.yaml",
-    ]
+    default_paths = PATHS_TO_CHECK
 
     # Try to load from specified file first
     if config_path:
@@ -484,7 +492,7 @@ def load_config(config_path: Optional[str] = None) -> AskSageConfig:
         # Interactive configuration creation
         try:
             config = create_config_interactive()
-            config_file_used = os.path.expanduser("~/.config/asksage_proxy/config.yaml")
+            config_file_used = str(DEFAULT_CONFIG_PATH)
         except (KeyboardInterrupt, ValueError) as e:
             logger.error(f"Configuration creation aborted: {e}")
             raise
@@ -592,7 +600,7 @@ def create_config_interactive() -> AskSageConfig:
     cert_path = get_cert_path()
 
     # Get verbose setting
-    verbose = get_yes_no_input(prompt="Enable verbose mode? [Y/n]: ", default_choice="y")
+    verbose = get_yes_no_input(prompt="Enable verbose mode? [Y/n]: ")
 
     # Create config with API keys
     config_data = AskSageConfig(
@@ -603,7 +611,7 @@ def create_config_interactive() -> AskSageConfig:
     )
 
     # Save config to default location
-    config_path = os.path.expanduser("~/.config/asksage_proxy/config.yaml")
+    config_path = str(DEFAULT_CONFIG_PATH)
     save_config(config_data, config_path)
     logger.info(f"Created new configuration at: {config_path}")
     logger.info(f"Configured {len(api_keys)} API key(s) with load balancing")
