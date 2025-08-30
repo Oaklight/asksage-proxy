@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from loguru import logger
 from pydantic import BaseModel
+from tqdm.asyncio import tqdm_asyncio  # <- add this import
 
 from .client import AskSageClient
 from .config import AskSageConfig
@@ -40,7 +41,7 @@ async def __validate_models(
 
     async with AskSageClient(config) as client:
         # Create semaphore to limit concurrent requests
-        semaphore = asyncio.Semaphore(5)  # Max 5 concurrent requests
+        semaphore = asyncio.Semaphore(20)  # Max 5 concurrent requests
 
         async def test_model(model_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             """Test a single model with a simple query."""
@@ -79,14 +80,11 @@ async def __validate_models(
                     logger.warning(f"Model {model_id} validation failed: {e}")
                     return None
 
-        # Test all models concurrently
-        tasks = [test_model(model) for model in models_to_test]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Run with a progress bar
+        tasks = [test_model(m) for m in models_to_test]
+        results = await tqdm_asyncio.gather(*tasks, desc="Validating models")
 
-        # Filter successful results
-        for result in results:
-            if result is not None and not isinstance(result, Exception):
-                validated_models.append(result)
+        validated_models = [r for r in results if r is not None]
 
     logger.info(
         f"Validated {len(validated_models)} out of {len(models_to_test)} models"
