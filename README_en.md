@@ -16,9 +16,11 @@ asksage-proxy # run the proxy
 
 **Note:** Query with images (e.g., OpenAI vision-style messages with image URLs or base64) is currently **not supported**. We welcome PRs or suggestions to help implement this feature.
 
-Function calling is available for Chat Completions endpoint starting from `v0.1.0`.
+Function calling interface is available for Chat Completions endpoint starting from `v0.1.0`. But the upstream AskSage API has some issues with function calling, so it may not work as expected.
 
-**New in v0.1.0+**: Multi-API key support with intelligent load balancing for improved reliability and rate limit management.
+**New in v0.2.0+**: Multi-API key support with intelligent load balancing for improved reliability and rate limit management.
+
+**New in v0.3.0+**: Added model-id availability test, and only serve models that are available.
 
 ## NOTICE OF USAGE
 
