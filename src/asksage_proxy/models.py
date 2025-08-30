@@ -137,8 +137,8 @@ async def load_or_validate_models(
 
     logger.info(f"Found {len(all_curated_ids)} curated models to validate")
 
-    # Fetch all models from API
-    logger.info("Fetching models from AskSage API...")
+    # Only validate when explicitly forced (costs tokens!)
+    logger.info("Performing API validation of curated models (this costs tokens)...")
     async with AskSageClient(config) as client:
         models_response = await client.get_models()
         all_upstream_models = models_response.get("data", [])
@@ -198,6 +198,7 @@ async def load_or_validate_models(
         "total_validated": len(validated_models),
         "total_curated": len(all_curated_ids),
         "total_upstream": len(all_upstream_models),
+        "validation_method": "api_validated",
     }
 
     # Save to cache
