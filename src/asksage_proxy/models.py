@@ -110,9 +110,9 @@ async def load_or_validate_models(
             with open(cache_path, "r") as f:
                 cached_data = json.load(f)
 
-            # Check if cache is recent (less than 24 hours old)
+            # Check if cache is recent (less than 24*7 hours old)
             cache_age = datetime.now().timestamp() - cache_path.stat().st_mtime
-            if cache_age < 24 * 3600:  # 24 hours
+            if cache_age < 24 * 7 * 3600:  # 24*7 hours
                 logger.info(f"Using cached models from {cache_path}")
                 return cached_data
             else:
