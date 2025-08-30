@@ -15,6 +15,7 @@ from .__init__ import __version__
 from .app import run_app
 from .config import AskSageConfig, load_config, save_config
 from .endpoints.extras import get_latest_pypi_version
+from .models import load_or_validate_models
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -224,6 +225,15 @@ Examples:
             config.port = args.port
         if args.verbose:
             config.verbose = args.verbose
+
+        # Validate models during startup
+        logger.info("Initializing model registry...")
+        try:
+            asyncio.run(load_or_validate_models(config))
+            logger.info("Model validation completed successfully")
+        except Exception as e:
+            logger.error(f"Model validation failed: {e}")
+            logger.warning("Continuing with startup, but models may not be available")
 
         logger.info(f"Starting AskSage Proxy on {config.host}:{config.port}")
         run_app(config)
