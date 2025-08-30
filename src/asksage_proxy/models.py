@@ -1,14 +1,183 @@
 """Model registry and management for AskSage Proxy."""
 
+import asyncio
+import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
 
 from loguru import logger
 from pydantic import BaseModel
 
 from .client import AskSageClient
 from .config import AskSageConfig
+
+
+def get_config_dir() -> Path:
+    """Get the configuration directory path."""
+    return Path.home() / ".config" / "asksage_proxy"
+
+
+def get_available_models_path() -> Path:
+    """Get the path to the available models cache file."""
+    return get_config_dir() / "available_models.json"
+
+
+async def __validate_models(
+    config: AskSageConfig, models_to_test: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Validate models by testing them with a simple query.
+
+    Args:
+        config: AskSage configuration
+        models_to_test: List of model dictionaries to validate
+
+    Returns:
+        List of validated model dictionaries that responded successfully
+    """
+    validated_models = []
+
+    async with AskSageClient(config) as client:
+        # Create semaphore to limit concurrent requests
+        semaphore = asyncio.Semaphore(5)  # Max 5 concurrent requests
+
+        async def test_model(model_info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            """Test a single model with a simple query."""
+            async with semaphore:
+                try:
+                    model_id = model_info.get("id", "")
+                    logger.debug(f"Testing model: {model_id}")
+
+                    # Simple test query to save tokens
+                    test_payload = {
+                        "model": model_id,
+                        "query": "hi",
+                        "max_tokens": 10,
+                        "temperature": 0.1,
+                    }
+
+                    response = await client.query(test_payload)
+
+                    # Check if response indicates unauthorized access
+                    response_text = str(response).lower()
+                    if (
+                        "not authorized" in response_text
+                        or "unauthorized" in response_text
+                    ):
+                        logger.warning(f"Model {model_id} not authorized for account")
+                        return None
+
+                    logger.debug(f"Model {model_id} validated successfully")
+                    return model_info
+
+                except Exception as e:
+                    logger.warning(f"Model {model_id} validation failed: {e}")
+                    return None
+
+        # Test all models concurrently
+        tasks = [test_model(model) for model in models_to_test]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Filter successful results
+        for result in results:
+            if result is not None and not isinstance(result, Exception):
+                validated_models.append(result)
+
+    logger.info(
+        f"Validated {len(validated_models)} out of {len(models_to_test)} models"
+    )
+    return validated_models
+
+
+async def load_or_validate_models(
+    config: AskSageConfig, force_validate: bool = False
+) -> Dict[str, Any]:
+    """Load models from cache or validate them if cache is missing/stale.
+
+    Args:
+        config: AskSage configuration
+        force_validate: Force validation even if cache exists
+
+    Returns:
+        Dictionary containing validated models in the format expected by ModelRegistry
+    """
+    cache_path = get_available_models_path()
+
+    # Try to load from cache first (unless forced to validate)
+    if not force_validate and cache_path.exists():
+        try:
+            with open(cache_path, "r") as f:
+                cached_data = json.load(f)
+
+            # Check if cache is recent (less than 24 hours old)
+            cache_age = datetime.now().timestamp() - cache_path.stat().st_mtime
+            if cache_age < 24 * 3600:  # 24 hours
+                logger.info(f"Using cached models from {cache_path}")
+                return cached_data
+            else:
+                logger.info("Cached models are stale, re-validating...")
+        except Exception as e:
+            logger.warning(f"Failed to load cached models: {e}")
+
+    # Fetch all models from API and validate them
+    logger.info("Fetching and validating models from AskSage API...")
+
+    async with AskSageClient(config) as client:
+        models_response = await client.get_models()
+        all_models = models_response.get("data", [])
+
+    if not all_models:
+        logger.warning("No models returned from API")
+        return {"chat_models": {}, "embedding_models": {}}
+
+    # Validate models
+    validated_models = await __validate_models(config, all_models)
+
+    # Organize models by type
+    chat_models = {}
+    embedding_models = {}
+
+    for model_info in validated_models:
+        model_id = model_info.get("id", "")
+        model_name = model_info.get("name", model_id)
+
+        # Create model entry
+        model_entry = {
+            "id": model_id,
+            "name": model_name,
+            "description": f"AskSage {model_name}",
+            "type": "chat",  # Default to chat, will be updated for embedding models
+        }
+
+        # Determine model type based on name/id patterns
+        if any(
+            embed_keyword in model_id.lower()
+            for embed_keyword in ["embed", "ada", "titan"]
+        ):
+            model_entry["type"] = "embedding"
+            embedding_models[model_name] = model_entry
+        else:
+            chat_models[model_name] = model_entry
+
+    # Prepare data for caching
+    cache_data = {
+        "chat_models": chat_models,
+        "embedding_models": embedding_models,
+        "last_updated": datetime.now().isoformat(),
+        "total_validated": len(validated_models),
+    }
+
+    # Save to cache
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "w") as f:
+            json.dump(cache_data, f, indent=2)
+        logger.info(f"Saved validated models to {cache_path}")
+    except Exception as e:
+        logger.warning(f"Failed to save models cache: {e}")
+
+    return cache_data
 
 
 class OpenAIModel(BaseModel):
@@ -39,96 +208,51 @@ class ModelRegistry:
         self._embed_models: Dict[str, AskSageModel] = {}
         self._last_updated: Optional[datetime] = None
 
-        # Default models as fallback
-        self._default_chat_models = {
-            "gpt-4o": AskSageModel("gpt4o", "GPT-4o", "OpenAI GPT-4o model", "chat"),
-            "gpt-4o-mini": AskSageModel(
-                "gpt4omini", "GPT-4o Mini", "OpenAI GPT-4o Mini model", "chat"
-            ),
-            "gpt-4": AskSageModel("gpt4", "GPT-4", "OpenAI GPT-4 model", "chat"),
-            "gpt-3.5-turbo": AskSageModel(
-                "gpt35", "GPT-3.5 Turbo", "OpenAI GPT-3.5 Turbo model", "chat"
-            ),
-            "claude-3-sonnet": AskSageModel(
-                "claudesonnet3", "Claude 3 Sonnet", "Anthropic Claude 3 Sonnet", "chat"
-            ),
-            "claude-3-haiku": AskSageModel(
-                "claudehaiku3", "Claude 3 Haiku", "Anthropic Claude 3 Haiku", "chat"
-            ),
-        }
-
-        self._default_embed_models = {
-            "text-embedding-3-small": AskSageModel(
-                "v3small",
-                "Text Embedding 3 Small",
-                "OpenAI text embedding model",
-                "embedding",
-            ),
-            "text-embedding-3-large": AskSageModel(
-                "v3large",
-                "Text Embedding 3 Large",
-                "OpenAI text embedding model",
-                "embedding",
-            ),
-            "text-embedding-ada-002": AskSageModel(
-                "ada002",
-                "Text Embedding Ada 002",
-                "OpenAI Ada embedding model",
-                "embedding",
-            ),
-        }
-
-    async def initialize(self) -> None:
-        """Initialize model registry by fetching from AskSage API."""
+    async def initialize(self, force_validate: bool = False) -> None:
+        """Initialize model registry by loading from cache or validating models.
+        
+        Args:
+            force_validate: Force validation even if cache exists
+        """
         try:
-            # Use AskSageClient (it will automatically use config.api_key)
-            async with AskSageClient(self.config) as client:
-                models_response = await client.get_models()
-                self._parse_models(models_response)
-                self._last_updated = datetime.now()
-                logger.info(
-                    f"Loaded {len(self._chat_models)} chat models and {len(self._embed_models)} embedding models"
-                )
+            # Load or validate models using the new system
+            models_data = await load_or_validate_models(self.config, force_validate)
+            self._parse_validated_models(models_data)
+            self._last_updated = datetime.now()
+            logger.info(
+                f"Loaded {len(self._chat_models)} chat models and {len(self._embed_models)} embedding models"
+            )
         except Exception as e:
-            logger.warning(f"Failed to fetch models from API, using defaults: {e}")
-            self._chat_models = self._default_chat_models.copy()
-            self._embed_models = self._default_embed_models.copy()
+            logger.error(f"Failed to load/validate models: {e}")
+            # Fallback to empty models - no hardcoded defaults
+            self._chat_models = {}
+            self._embed_models = {}
+            raise
 
-    def _parse_models(self, models_response: Dict[str, Any]) -> None:
-        """Parse models data from AskSage API response."""
+    def _parse_validated_models(self, models_data: Dict[str, Any]) -> None:
+        """Parse validated models data from cache/validation."""
         self._chat_models.clear()
         self._embed_models.clear()
 
-        # Extract models from the response
-        models_data = models_response.get("data", [])
+        # Load chat models
+        chat_models_data = models_data.get("chat_models", {})
+        for model_name, model_info in chat_models_data.items():
+            self._chat_models[model_name] = AskSageModel(
+                id=model_info["id"],
+                name=model_info["name"],
+                description=model_info.get("description", ""),
+                type=model_info.get("type", "chat")
+            )
 
-        for model_info in models_data:
-            model_id = model_info.get("id", "")
-            model_name = model_info.get("name", model_id)
-
-            # Determine model type based on name/id patterns
-            if any(
-                embed_keyword in model_id.lower()
-                for embed_keyword in ["embed", "ada", "titan"]
-            ):
-                model_type = "embedding"
-                self._embed_models[model_name] = AskSageModel(
-                    model_id, model_name, f"AskSage {model_name}", model_type
-                )
-            else:
-                model_type = "chat"
-                self._chat_models[model_name] = AskSageModel(
-                    model_id, model_name, f"AskSage {model_name}", model_type
-                )
-
-        # Add default models if not present
-        for name, model in self._default_chat_models.items():
-            if name not in self._chat_models:
-                self._chat_models[name] = model
-
-        for name, model in self._default_embed_models.items():
-            if name not in self._embed_models:
-                self._embed_models[name] = model
+        # Load embedding models
+        embed_models_data = models_data.get("embedding_models", {})
+        for model_name, model_info in embed_models_data.items():
+            self._embed_models[model_name] = AskSageModel(
+                id=model_info["id"],
+                name=model_info["name"],
+                description=model_info.get("description", ""),
+                type=model_info.get("type", "embedding")
+            )
 
     def get_chat_models(self) -> Dict[str, AskSageModel]:
         """Get available chat models."""

@@ -27,9 +27,9 @@ async def init_app(config: Optional[AskSageConfig] = None) -> web.Application:
     # Store config in app
     app["config"] = config
 
-    # Initialize model registry
+    # Initialize model registry (skip validation since it's done in CLI)
     model_registry = ModelRegistry(config)
-    await model_registry.initialize()
+    await model_registry.initialize(force_validate=False)
     app["model_registry"] = model_registry
 
     # Setup routes
