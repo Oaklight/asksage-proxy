@@ -68,7 +68,7 @@ async def test_tools_raw():
                 "model": "gpt-4o",
                 "temperature": 0.0,
                 "persona": "default",
-                "dataset": "all",
+                "dataset": "none",
                 "live": 0,
                 "limit_references": 0,
                 "tools": json.dumps(tools),  # Convert to JSON string as ANL client does

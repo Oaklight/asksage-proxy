@@ -42,7 +42,7 @@ async def test_simple_auth():
                 "model": "gpt-4o",
                 "temperature": 0.0,
                 "persona": "default",
-                "dataset": "all",
+                "dataset": "none",
                 "live": 0,
             }
             

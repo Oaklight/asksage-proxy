@@ -100,7 +100,7 @@ async def transform_openai_to_asksage(data: Dict[str, Any]) -> Dict[str, Any]:
         "model": data.get("model", DEFAULT_MODEL),
         "temperature": data.get("temperature", 0.0),
         "persona": "default",
-        "dataset": "all",
+        "dataset": "none",
         "live": 0,
         "limit_references": 0,  # Remove references to avoid problematic content
     }
