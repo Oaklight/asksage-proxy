@@ -93,7 +93,7 @@ async def __validate_models(
 async def load_or_validate_models(
     config: AskSageConfig, force_validate: bool = False
 ) -> Dict[str, Any]:
-    """Load models from cache or validate them if cache is missing/stale.
+    """Load models from cache or validate them if cache is missing.
 
     Args:
         config: AskSage configuration
@@ -104,41 +104,20 @@ async def load_or_validate_models(
     """
     cache_path = get_available_models_path()
 
-    # Try to load from cache first (unless forced to validate)
+    # Use cache if it exists and we're not forcing validation
     if not force_validate and cache_path.exists():
         try:
             with open(cache_path, "r") as f:
                 cached_data = json.load(f)
-
-            # Check if cache is recent (less than 24*7 hours old)
-            cache_age = datetime.now().timestamp() - cache_path.stat().st_mtime
-            if cache_age < 24 * 7 * 3600:  # 24*7 hours
-                logger.info(f"Using cached models from {cache_path}")
-                return cached_data
-            else:
-                logger.info("Cached models are stale, re-validating...")
+            logger.info(f"Using cached models from {cache_path}")
+            return cached_data
         except Exception as e:
             logger.warning(f"Failed to load cached models: {e}")
 
-    # Load curated model list from available_models.json
-    curated_models_path = Path(__file__).parent.parent.parent / "available_models.json"
-    try:
-        with open(curated_models_path, "r") as f:
-            curated_data = json.load(f)
-        logger.debug(f"Loaded curated models from {curated_models_path}")
-    except Exception as e:
-        logger.error(f"Failed to load curated models from {curated_models_path}: {e}")
-        return {"chat_models": {}, "embedding_models": {}}
+    # Fetch all upstream models and validate them (ignore curated models)
+    logger.info("Fetching all upstream models and validating (this costs tokens)...")
 
-    # Get all curated model IDs for filtering
-    curated_chat_ids = set(curated_data.get("chat_models", {}).keys())
-    curated_embed_ids = set(curated_data.get("embedding_models", {}).keys())
-    all_curated_ids = curated_chat_ids | curated_embed_ids
-
-    logger.info(f"Found {len(all_curated_ids)} curated models to validate")
-
-    # Only validate when explicitly forced (costs tokens!)
-    logger.info("Performing API validation of curated models (this costs tokens)...")
+    # Fetch all upstream models
     async with AskSageClient(config) as client:
         models_response = await client.get_models()
         all_upstream_models = models_response.get("data", [])
@@ -147,48 +126,28 @@ async def load_or_validate_models(
         logger.warning("No models returned from API")
         return {"chat_models": {}, "embedding_models": {}}
 
-    # Filter upstream models to only include curated ones
-    models_to_validate = []
-    upstream_model_ids = {model.get("id", "") for model in all_upstream_models}
+    logger.info(f"Validating {len(all_upstream_models)} upstream models")
 
-    for model in all_upstream_models:
-        model_id = model.get("id", "")
-        if model_id in all_curated_ids:
-            models_to_validate.append(model)
-        else:
-            logger.debug(f"Skipping non-curated model: {model_id}")
+    # Validate all upstream models
+    validated_models = await __validate_models(config, all_upstream_models)
 
-    logger.info(
-        f"Validating {len(models_to_validate)} curated models that exist upstream"
-    )
-
-    # Validate only the curated models that exist upstream
-    validated_models = await __validate_models(config, models_to_validate)
-
-    # Organize validated models using curated metadata
+    # Organize validated models (no curated metadata, use upstream data)
     chat_models = {}
     embedding_models = {}
 
     for model_info in validated_models:
         model_id = model_info.get("id", "")
 
-        # Use curated metadata if available, otherwise use upstream data
-        if model_id in curated_chat_ids:
-            curated_info = curated_data["chat_models"][model_id]
-            chat_models[model_id] = {
-                "id": model_id,
-                "name": curated_info.get("name", model_id),
-                "description": curated_info.get("description", f"AskSage {model_id}"),
-                "type": "chat",
-            }
-        elif model_id in curated_embed_ids:
-            curated_info = curated_data["embedding_models"][model_id]
-            embedding_models[model_id] = {
-                "id": model_id,
-                "name": curated_info.get("name", model_id),
-                "description": curated_info.get("description", f"AskSage {model_id}"),
-                "type": "embedding",
-            }
+        # Create basic model info from upstream data
+        model_data = {
+            "id": model_id,
+            "name": model_id,  # Use ID as name since no curated metadata
+            "description": f"AskSage {model_id}",
+            "type": "chat",  # Default to chat type
+        }
+
+        # Add to chat models (we don't know which are embedding models without curated data)
+        chat_models[model_id] = model_data
 
     # Prepare data for caching
     cache_data = {
@@ -196,9 +155,8 @@ async def load_or_validate_models(
         "embedding_models": embedding_models,
         "last_updated": datetime.now().isoformat(),
         "total_validated": len(validated_models),
-        "total_curated": len(all_curated_ids),
         "total_upstream": len(all_upstream_models),
-        "validation_method": "api_validated",
+        "validation_method": "api_validated_all",
     }
 
     # Save to cache
