@@ -42,6 +42,11 @@ The machine making API calls to AskSage doesn't need to be connected to Argonne 
     - [OpenAI Compatible](#openai-compatible)
     - [Not OpenAI Compatible](#not-openai-compatible)
   - [Models](#models)
+    - [Model Discovery Strategy](#model-discovery-strategy)
+    - [Model Loading Behavior](#model-loading-behavior)
+    - [How It Works](#how-it-works)
+    - [Checking Available Models](#checking-available-models)
+    - [Model Validation Details](#model-validation-details)
   - [Tool Calls](#tool-calls)
     - [Tool Call Examples](#tool-call-examples)
 - [Bug Reports and Contributions](#bug-reports-and-contributions)
@@ -246,7 +251,7 @@ All paths are normalized to absolute paths when saved to ensure consistency rega
 ```bash
 $ asksage-proxy --help
 usage: asksage-proxy [-h] [--host HOST] [--port PORT] [--verbose] [--show] [--edit]
-                     [config]
+                     [--refresh-available-models] [config]
 
 AskSage Proxy - OpenAI-compatible proxy for AskSage API
 
@@ -260,11 +265,15 @@ options:
   --verbose, -v         Enable verbose logging
   --show, -s            Show current configuration and exit
   --edit, -e            Edit configuration file with system default editor
+  --refresh-available-models
+                        Force refresh of available models from AskSage API
+                        (costs tokens - only use when needed)
 
 Examples:
   asksage-proxy                          # Run proxy server
   asksage-proxy --show                   # Show current configuration
   asksage-proxy --edit                   # Edit configuration file
+  asksage-proxy --refresh-available-models  # Refresh model list (costs tokens)
   asksage-proxy config.yaml --host 0.0.0.0 --port 8080
 ```
 
@@ -396,12 +405,50 @@ The following endpoints are planned for future releases:
 
 ### Models
 
-The proxy automatically discovers available chat models from the AskSage API and provides them in OpenAI-compatible format.
+The proxy uses a cost-conscious model validation system that balances functionality with token usage efficiency.
+
+#### Model Discovery Strategy
+
+**Cost-Conscious Approach**: The proxy prioritizes cost efficiency by avoiding unnecessary API calls:
+
+1. **Curated Model List**: Uses `available_models.json` as a whitelist of supported models
+2. **Cache-First Loading**: Loads previously validated models from `~/.config/asksage_proxy/available_models.json`
+3. **No Automatic Validation**: Never performs expensive API validation during normal startup
+4. **Explicit Validation**: Only validates models when explicitly requested via CLI flag
+
+#### Model Loading Behavior
+
+**Normal Startup (No Token Cost)**:
+
+```bash
+# Uses cached models or curated list - no API calls
+asksage-proxy
+```
+
+**Forced Validation (Costs Tokens)**:
+
+```bash
+# Tests all curated models against AskSage API
+asksage-proxy --refresh-available-models
+```
+
+#### How It Works
+
+1. **Startup**: Proxy loads models from cache or `available_models.json` without API calls
+2. **Curated Whitelist**: Only models listed in `available_models.json` are ever served
+3. **Validation Process**: When `--refresh-available-models` is used:
+   - Fetches all models from AskSage API
+   - Filters to only include curated models
+   - Tests each model with a minimal query
+   - Caches working models for future use
+4. **Authorization Filtering**: Automatically excludes models the user cannot access
+
+#### Checking Available Models
 
 To see the available models, start the proxy and check the models endpoint:
 
 ```bash
-# Start the proxy
+# Start the proxy (uses cached/curated models - no token cost)
 asksage-proxy
 
 # In another terminal, check available models
@@ -422,6 +469,31 @@ models = client.models.list()
 for model in models.data:
     print(f"Model: {model.id}")
 ```
+
+#### Model Validation Details
+
+**When to Use `--refresh-available-models`**:
+
+- First-time setup (no cached models exist)
+- After AskSage API changes or new model releases
+- When experiencing model availability issues
+- Periodic validation (recommended monthly)
+
+**What Happens During Validation**:
+
+- Loads curated model list from `available_models.json`
+- Queries AskSage API for all available models
+- Tests intersection of curated + available models
+- Saves working models to `~/.config/asksage_proxy/available_models.json`
+- Uses concurrent validation (max 5 simultaneous requests) for efficiency
+
+**Cost Considerations**:
+
+- Normal startup: **0 tokens** (uses cache or curated list)
+- Validation: **~1-3 tokens per model** (minimal "hi" queries)
+- Current curated list: **25 models** = ~25-75 tokens per validation
+
+This approach ensures fast startup times while maintaining model accuracy and minimizing unnecessary token usage.
 
 ### Tool Calls
 
