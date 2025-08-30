@@ -161,6 +161,7 @@ Examples:
   asksage-proxy                          # Run proxy server
   asksage-proxy --show                   # Show current configuration
   asksage-proxy --edit                   # Edit configuration file
+  asksage-proxy --refresh-available-models  # Force refresh of model cache
   asksage-proxy config.yaml --host 0.0.0.0 --port 50733
         """,
     )
@@ -188,6 +189,12 @@ Examples:
         "-e",
         action="store_true",
         help="Edit configuration file with system default editor",
+    )
+
+    parser.add_argument(
+        "--refresh-available-models",
+        action="store_true",
+        help="Force refresh of available models cache by re-validating all curated models",
     )
 
     parser.add_argument(
@@ -229,7 +236,12 @@ Examples:
         # Validate models during startup
         logger.info("Initializing model registry...")
         try:
-            asyncio.run(load_or_validate_models(config))
+            force_validate = args.refresh_available_models
+            if force_validate:
+                logger.info(
+                    "Forcing model validation due to --refresh-available-models flag"
+                )
+            asyncio.run(load_or_validate_models(config, force_validate=force_validate))
             logger.info("Model validation completed successfully")
         except Exception as e:
             logger.error(f"Model validation failed: {e}")
