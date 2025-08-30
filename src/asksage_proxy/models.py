@@ -46,7 +46,7 @@ async def __validate_models(
                         "max_tokens": 10,
                         "temperature": 0.0,
                         "persona": "default",
-                        "dataset": "all",
+                        "dataset": "none",
                         "live": 0,
                         "limit_references": 0,
                     }
