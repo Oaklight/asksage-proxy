@@ -65,7 +65,7 @@ async def __validate_models(
                         "not authorized" in response_text
                         or "unauthorized" in response_text
                     ):
-                        logger.warning(f"Model {model_id} not authorized for account")
+                        logger.debug(f"Model {model_id} not authorized for account")
                         return None
 
                     logger.debug(f"Model {model_id} validated successfully")
@@ -120,45 +120,75 @@ async def load_or_validate_models(
         except Exception as e:
             logger.warning(f"Failed to load cached models: {e}")
 
-    # Fetch all models from API and validate them
-    logger.info("Fetching and validating models from AskSage API...")
+    # Load curated model list from available_models.json
+    curated_models_path = Path(__file__).parent.parent.parent / "available_models.json"
+    try:
+        with open(curated_models_path, "r") as f:
+            curated_data = json.load(f)
+        logger.debug(f"Loaded curated models from {curated_models_path}")
+    except Exception as e:
+        logger.error(f"Failed to load curated models from {curated_models_path}: {e}")
+        return {"chat_models": {}, "embedding_models": {}}
 
+    # Get all curated model IDs for filtering
+    curated_chat_ids = set(curated_data.get("chat_models", {}).keys())
+    curated_embed_ids = set(curated_data.get("embedding_models", {}).keys())
+    all_curated_ids = curated_chat_ids | curated_embed_ids
+
+    logger.info(f"Found {len(all_curated_ids)} curated models to validate")
+
+    # Fetch all models from API
+    logger.info("Fetching models from AskSage API...")
     async with AskSageClient(config) as client:
         models_response = await client.get_models()
-        all_models = models_response.get("data", [])
+        all_upstream_models = models_response.get("data", [])
 
-    if not all_models:
+    if not all_upstream_models:
         logger.warning("No models returned from API")
         return {"chat_models": {}, "embedding_models": {}}
 
-    # Validate models
-    validated_models = await __validate_models(config, all_models)
+    # Filter upstream models to only include curated ones
+    models_to_validate = []
+    upstream_model_ids = {model.get("id", "") for model in all_upstream_models}
 
-    # Organize models by type
+    for model in all_upstream_models:
+        model_id = model.get("id", "")
+        if model_id in all_curated_ids:
+            models_to_validate.append(model)
+        else:
+            logger.debug(f"Skipping non-curated model: {model_id}")
+
+    logger.info(
+        f"Validating {len(models_to_validate)} curated models that exist upstream"
+    )
+
+    # Validate only the curated models that exist upstream
+    validated_models = await __validate_models(config, models_to_validate)
+
+    # Organize validated models using curated metadata
     chat_models = {}
     embedding_models = {}
 
     for model_info in validated_models:
         model_id = model_info.get("id", "")
-        model_name = model_info.get("name", model_id)
 
-        # Create model entry
-        model_entry = {
-            "id": model_id,
-            "name": model_name,
-            "description": f"AskSage {model_name}",
-            "type": "chat",  # Default to chat, will be updated for embedding models
-        }
-
-        # Determine model type based on name/id patterns
-        if any(
-            embed_keyword in model_id.lower()
-            for embed_keyword in ["embed", "ada", "titan"]
-        ):
-            model_entry["type"] = "embedding"
-            embedding_models[model_name] = model_entry
-        else:
-            chat_models[model_name] = model_entry
+        # Use curated metadata if available, otherwise use upstream data
+        if model_id in curated_chat_ids:
+            curated_info = curated_data["chat_models"][model_id]
+            chat_models[model_id] = {
+                "id": model_id,
+                "name": curated_info.get("name", model_id),
+                "description": curated_info.get("description", f"AskSage {model_id}"),
+                "type": "chat",
+            }
+        elif model_id in curated_embed_ids:
+            curated_info = curated_data["embedding_models"][model_id]
+            embedding_models[model_id] = {
+                "id": model_id,
+                "name": curated_info.get("name", model_id),
+                "description": curated_info.get("description", f"AskSage {model_id}"),
+                "type": "embedding",
+            }
 
     # Prepare data for caching
     cache_data = {
@@ -166,6 +196,8 @@ async def load_or_validate_models(
         "embedding_models": embedding_models,
         "last_updated": datetime.now().isoformat(),
         "total_validated": len(validated_models),
+        "total_curated": len(all_curated_ids),
+        "total_upstream": len(all_upstream_models),
     }
 
     # Save to cache
@@ -210,7 +242,7 @@ class ModelRegistry:
 
     async def initialize(self, force_validate: bool = False) -> None:
         """Initialize model registry by loading from cache or validating models.
-        
+
         Args:
             force_validate: Force validation even if cache exists
         """
@@ -236,22 +268,24 @@ class ModelRegistry:
 
         # Load chat models
         chat_models_data = models_data.get("chat_models", {})
-        for model_name, model_info in chat_models_data.items():
-            self._chat_models[model_name] = AskSageModel(
+        for model_id, model_info in chat_models_data.items():
+            # Use model_id as the key since that's how they're stored now
+            self._chat_models[model_id] = AskSageModel(
                 id=model_info["id"],
                 name=model_info["name"],
                 description=model_info.get("description", ""),
-                type=model_info.get("type", "chat")
+                type=model_info.get("type", "chat"),
             )
 
         # Load embedding models
         embed_models_data = models_data.get("embedding_models", {})
-        for model_name, model_info in embed_models_data.items():
-            self._embed_models[model_name] = AskSageModel(
+        for model_id, model_info in embed_models_data.items():
+            # Use model_id as the key since that's how they're stored now
+            self._embed_models[model_id] = AskSageModel(
                 id=model_info["id"],
                 name=model_info["name"],
                 description=model_info.get("description", ""),
-                type=model_info.get("type", "embedding")
+                type=model_info.get("type", "embedding"),
             )
 
     def get_chat_models(self) -> Dict[str, AskSageModel]:
@@ -298,7 +332,7 @@ class ModelRegistry:
         """Convert models to OpenAI-compatible format."""
         models = []
         for model in self.get_all_models().values():
-            openai_model = OpenAIModel(id=model.name)
+            openai_model = OpenAIModel(id=model.id)
             models.append(openai_model.model_dump())
 
         return {"object": "list", "data": models}
