@@ -13,7 +13,13 @@ from packaging import version
 
 from .__init__ import __version__
 from .app import run_app
-from .config import AskSageConfig, load_config, save_config
+from .config import (
+    DEFAULT_CONFIG_PATH,
+    PATHS_TO_CHECK,
+    AskSageConfig,
+    load_config,
+    save_config,
+)
 from .endpoints.extras import get_latest_pypi_version
 from .models import load_or_validate_models
 
@@ -36,14 +42,7 @@ def find_config_file(config_path: Optional[str] = None) -> Optional[str]:
         paths_to_try.append(config_path)
 
     # Standard config locations
-    paths_to_try.extend(
-        [
-            "~/.config/asksage_proxy/config.yaml",
-            "~/.asksage_proxy.yaml",
-            "./config.yaml",
-            "./asksage_proxy.yaml",
-        ]
-    )
+    paths_to_try.extend(PATHS_TO_CHECK)
 
     for path in paths_to_try:
         expanded_path = Path(path).expanduser()
@@ -81,7 +80,7 @@ def open_in_editor(config_path: Optional[str] = None) -> None:
             file_to_edit = found_config
         else:
             # Create default config file if none exists
-            default_path = Path("~/.config/asksage_proxy/config.yaml").expanduser()
+            default_path = DEFAULT_CONFIG_PATH
             default_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Create a basic config template

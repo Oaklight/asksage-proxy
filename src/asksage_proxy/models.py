@@ -4,7 +4,6 @@ import asyncio
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from loguru import logger
@@ -12,17 +11,7 @@ from pydantic import BaseModel
 from tqdm.asyncio import tqdm_asyncio  # <- add this import
 
 from .client import AskSageClient
-from .config import AskSageConfig
-
-
-def get_config_dir() -> Path:
-    """Get the configuration directory path."""
-    return Path.home() / ".config" / "asksage_proxy"
-
-
-def get_available_models_path() -> Path:
-    """Get the path to the available models cache file."""
-    return get_config_dir() / "available_models.json"
+from .config import AVAILABLE_MODELS_PATH, AskSageConfig
 
 
 async def __validate_models(
@@ -104,7 +93,7 @@ async def load_or_validate_models(
     Returns:
         Dictionary containing validated models in the format expected by ModelRegistry
     """
-    cache_path = get_available_models_path()
+    cache_path = AVAILABLE_MODELS_PATH
 
     # Use cache if it exists and we're not forcing validation
     if not force_validate and cache_path.exists():
