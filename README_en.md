@@ -42,7 +42,9 @@ The machine making API calls to AskSage doesn't need to be connected to Argonne 
 - [Usage](#usage)
   - [Endpoints](#endpoints)
     - [OpenAI Compatible](#openai-compatible)
-    - [Not OpenAI Compatible](#not-openai-compatible)
+    - [Anthropic Compatible](#anthropic-compatible)
+    - [Google Gemini Compatible](#google-gemini-compatible)
+    - [System Endpoints](#system-endpoints)
   - [Models](#models)
     - [Model Discovery Strategy](#model-discovery-strategy)
     - [Model Loading Behavior](#model-loading-behavior)
@@ -388,10 +390,37 @@ For detailed configuration options and advanced usage, see the [API Key Load Bal
 
 These endpoints convert responses from the AskSage API to be compatible with OpenAI's format:
 
-- **`/v1/chat/completions`**: Chat Completions API with streaming support.
-- **`/v1/models`**: Lists available models in OpenAI-compatible format.
+- **`/v1/chat/completions`** (alias: **`/chat/completions`**): Chat Completions API with streaming and tool calling support.
+- **`/v1/responses`** (alias: **`/responses`**): OpenAI Responses API supporting stateful inputs, tools, reasoning, and real-time SSE streaming.
+- **`/v1/embeddings`** (alias: **`/embeddings`**): Vector Embeddings API (compatible with `text-embedding-3-small`, `text-embedding-ada-002`, etc.).
+- **`/v1/models`** & **`/v1/models/{model_id}`**: Lists all available models or retrieves a single model in OpenAI-compatible format.
 
-#### Not OpenAI Compatible
+#### Anthropic Compatible
+
+These endpoints follow Anthropic's Messages API format and support streaming and token counting:
+
+- **`/v1/messages`** (alias: **`/messages`**): Anthropic Messages API with full streaming (SSE) and non-streaming support.
+- **`/v1/messages/count_tokens`** (alias: **`/messages/count_tokens`**): Token counting endpoint.
+
+Supported models:
+- Claude models (e.g. `claude-3-5-sonnet-20241022`, `claude-sonnet-4-5-20250929`, `google-claude-sonnet-5`) route directly to native AskSage Anthropic backend.
+- Non-Claude models (e.g. `gpt-4o`, `gpt-4.1`) automatically adapt via `llm-rosetta` to provide compliant Anthropic message envelopes and SSE events.
+- Compatible with official `anthropic` Python SDK and Claude Code CLI.
+
+#### Google Gemini Compatible
+
+These endpoints follow Google Gemini / Vertex AI format and support streaming:
+
+- **`/v1beta/models/{model}:generateContent`** (and `/v1/models/{model}:generateContent`): Generate content using Gemini models.
+- **`/v1beta/models/{model}:streamGenerateContent`** (and `/v1/models/{model}:streamGenerateContent`): Stream content with real-time SSE chunk delivery.
+
+Supported model naming conventions include:
+- Simple names: `flash`, `pro`
+- AskSage IDs: `google-gemini-3.7-flash`, `google-gemini-2.5-pro`, `google-gemini-2.5-flash`
+- Google standard names: `gemini-2.5-pro`, `models/gemini-2.5-pro`, `publishers/google/models/gemini-2.5-pro`
+- Cross-model fallback: Non-Gemini models (e.g. `gpt-4o`) are automatically adapted via `llm-rosetta`.
+
+#### System Endpoints
 
 These are proxy server endpoints that provide server information and health status (they do not query the AskSage API):
 

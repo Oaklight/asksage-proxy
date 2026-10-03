@@ -24,6 +24,7 @@ dependencies = [
     "pydantic>=2.11.7",
     "tqdm>=4.67.1",
     "packaging>=25.0",
+    "llm-rosetta>=0.13.0",
 ]
 
 [project.optional-dependencies]
