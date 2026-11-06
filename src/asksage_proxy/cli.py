@@ -1,258 +1,189 @@
-"""Command line interface for AskSage Proxy."""
+"""Command line entry point for ``asksage-proxy``.
+
+The launcher's job is small and the flags should say so: point at the old
+``config.yaml`` (or let it be found), migrate it once, check the shims, and
+hand the process over to ``llm-rosetta-gateway``.
+"""
+
+from __future__ import annotations
 
 import argparse
-import asyncio
 import os
 import subprocess
 import sys
-from pathlib import Path
-from typing import Optional
+from typing import Any, Sequence
 
-from loguru import logger
-from packaging import version
+from . import __version__, launcher
 
-from .__init__ import __version__
-from .app import run_app
-from .config import (
-    DEFAULT_CONFIG_PATH,
-    PATHS_TO_CHECK,
-    AskSageConfig,
-    load_config,
-    save_config,
-)
-from .endpoints.extras import get_latest_pypi_version
-from .models import load_or_validate_models
+EXIT_CONFIG = 2
 
 
-def setup_logging(verbose: bool = False) -> None:
-    """Setup logging configuration."""
-    logger.remove()  # Remove default handler
-
-    log_level = "DEBUG" if verbose else "INFO"
-    log_format = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
-
-    logger.add(sys.stderr, level=log_level, format=log_format)
-
-
-def find_config_file(config_path: Optional[str] = None) -> Optional[str]:
-    """Find configuration file in standard locations."""
-    paths_to_try = []
-
-    if config_path:
-        paths_to_try.append(config_path)
-
-    # Standard config locations
-    paths_to_try.extend(PATHS_TO_CHECK)
-
-    for path in paths_to_try:
-        expanded_path = Path(path).expanduser()
-        if expanded_path.exists():
-            return str(expanded_path)
-
-    return None
-
-
-def show_config(config_path: Optional[str] = None) -> None:
-    """Show current configuration."""
-    try:
-        config = load_config(config_path)
-        print("Current AskSage Proxy Configuration:")
-        print("=" * 50)
-        for key, value in config.to_dict().items():
-            if key == "api_key" and value:
-                # Mask API key for security
-                print(f"{key}: ***{value[-10:]}")
-            else:
-                print(f"{key}: {value}")
-    except Exception as e:
-        logger.error(f"Failed to load configuration: {e}")
-        sys.exit(1)
-
-
-def open_in_editor(config_path: Optional[str] = None) -> None:
-    """Open configuration file in system default editor."""
-    # Find existing config file or use default location
-    if config_path and Path(config_path).expanduser().exists():
-        file_to_edit = str(Path(config_path).expanduser())
-    else:
-        found_config = find_config_file(config_path)
-        if found_config:
-            file_to_edit = found_config
-        else:
-            # Create default config file if none exists
-            default_path = DEFAULT_CONFIG_PATH
-            default_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Create a basic config template
-            template_config = AskSageConfig(
-                host="0.0.0.0",
-                port=50733,
-                api_key="",  # Will use environment variable
-            )
-            save_config(template_config, str(default_path))
-            file_to_edit = str(default_path)
-            logger.info(f"Created new configuration file at: {file_to_edit}")
-
-    # Try different editors based on OS
-    editors_to_try = []
-
-    # Use EDITOR environment variable if set
-    if os.getenv("EDITOR"):
-        editors_to_try.append(os.getenv("EDITOR"))
-
-    # OS-specific defaults
-    if os.name == "nt":  # Windows
-        editors_to_try.extend(["notepad.exe", "code", "notepad++"])
-    else:  # Unix-like (Linux, macOS)
-        editors_to_try.extend(["nano", "vi", "vim", "code", "gedit"])
-
-    # Try each editor
-    for editor in editors_to_try:
-        if editor is None:
-            continue
-        try:
-            subprocess.run([editor, file_to_edit], check=True)
-            return
-        except FileNotFoundError:
-            continue  # Try next editor
-        except subprocess.CalledProcessError:
-            continue  # Try next editor
-        except Exception as e:
-            logger.error(f"Failed to open editor {editor}: {e}")
-            continue
-
-    logger.error(
-        "Could not find a suitable editor. Please set the EDITOR environment variable."
-    )
-    logger.info(f"Configuration file location: {file_to_edit}")
-    sys.exit(1)
-
-
-def version_check() -> str:
-    """Check current version against PyPI and return version info with warnings.
-
-    Returns:
-        str: Version information string, potentially with update warnings.
-    """
-    ver_content = [__version__]
-    latest = asyncio.run(get_latest_pypi_version())
-
-    if latest:
-        # Use packaging.version to compare versions correctly
-        if version.parse(latest) > version.parse(__version__):
-            ver_content.extend(
-                [
-                    f"New version available: {latest}",
-                    "Update with `pip install --upgrade asksage-proxy`",
-                ]
-            )
-
-    return "\n".join(ver_content)
-
-
-def main() -> None:
-    """Main CLI entry point."""
+def build_parser() -> argparse.ArgumentParser:
+    """Return the argument parser."""
     parser = argparse.ArgumentParser(
-        description="AskSage Proxy - OpenAI-compatible proxy for AskSage API",
+        prog="asksage-proxy",
+        description=(
+            "Run the llm-rosetta gateway with the AskSage shims. Migrates a "
+            "legacy config.yaml once, then proxies in every supported format."
+        ),
+        epilog=(
+            "Docs: https://github.com/Oaklight/asksage-proxy\n"
+            "The proxy itself is llm-rosetta-gateway; its admin panel is at "
+            "http://<host>:<port>/admin."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  asksage-proxy                          # Run proxy server
-  asksage-proxy --show                   # Show current configuration
-  asksage-proxy --edit                   # Edit configuration file
-  asksage-proxy --refresh-available-models  # Force refresh of model cache
-  asksage-proxy config.yaml --host 0.0.0.0 --port 50733
-        """,
     )
-
     parser.add_argument(
-        "config", nargs="?", help="Path to configuration file (optional)"
+        "config",
+        nargs="?",
+        help="Path to the legacy config.yaml (optional; searched if omitted)",
     )
-
-    parser.add_argument("--host", "-H", help="Host to bind to (overrides config)")
-
+    parser.add_argument("--host", "-H", help="Override the listening host")
+    parser.add_argument("--port", "-p", type=int, help="Override the listening port")
     parser.add_argument(
-        "--port", "-p", type=int, help="Port to bind to (overrides config)"
+        "--verbose", "-v", action="store_true", help="Enable debug logging"
     )
-
     parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Enable verbose logging"
+        "--show", "-s", action="store_true", help="Print the gateway config and exit"
     )
-
-    parser.add_argument(
-        "--show", "-s", action="store_true", help="Show current configuration and exit"
-    )
-
     parser.add_argument(
         "--edit",
         "-e",
         action="store_true",
-        help="Edit configuration file with system default editor",
+        help="Open the gateway config in $EDITOR (migrating first)",
     )
-
+    parser.add_argument(
+        "--migrate-force",
+        action="store_true",
+        help="Regenerate config.jsonc even if it was edited after generation",
+    )
+    parser.add_argument(
+        "--no-preflight",
+        action="store_true",
+        help="Skip the shim availability check (the gateway reports it instead)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the gateway command instead of running it",
+    )
     parser.add_argument(
         "--refresh-available-models",
         action="store_true",
-        help="Force refresh of available models cache by re-validating all curated models",
+        help="Removed: fetch models from the gateway admin panel instead",
     )
-
     parser.add_argument(
         "--version",
         "-V",
         action="version",
-        version=f"%(prog)s {version_check()}",
-        help="Show the version and check for updates",
+        version=f"%(prog)s {__version__}",
     )
+    return parser
 
-    args = parser.parse_args()
 
-    # Handle special actions first
-    if args.show:
-        show_config(args.config)
-        return
+def _print(message: str) -> None:
+    """Write *message* to stdout."""
+    print(message, flush=True)
 
-    if args.edit:
-        open_in_editor(args.config)
-        return
 
-    # Default action: run the server
-    setup_logging(args.verbose)
+def _fail(message: str, code: int = EXIT_CONFIG) -> int:
+    """Write *message* to stderr and return *code*."""
+    print(message, file=sys.stderr, flush=True)
+    return code
 
+
+def _prepare_config(args: argparse.Namespace, files: launcher.Layout) -> dict[str, Any]:
+    """Migrate the legacy file when present, else keep the existing config.
+
+    Returns:
+        The legacy mapping (empty when the run starts from an existing
+        ``config.jsonc``), for the environment and log-level decisions.
+
+    Raises:
+        launcher.LauncherError: Nothing to run.
+    """
+    legacy_path = launcher.find_legacy_config(args.config)
+    if legacy_path is None:
+        if files.gateway_config.is_file():
+            return {}
+        raise launcher.LauncherError(
+            "No configuration found. Point at the legacy config.yaml "
+            "(asksage-proxy /path/to/config.yaml), or create one with:\n"
+            "  llm-rosetta-gateway init\n"
+            'and set shim "asksage--chat_completions" on its provider.'
+        )
+
+    result = launcher.migrate(legacy_path, files, force=args.migrate_force)
+    _print(result.message)
+    return launcher.load_legacy(legacy_path)
+
+
+def _show(files: launcher.Layout) -> int:
+    """Print the effective gateway config."""
+    _print(f"# {files.gateway_config}")
+    _print(files.gateway_config.read_text(encoding="utf-8").rstrip())
+    return 0
+
+
+def _edit(files: launcher.Layout) -> int:
+    """Open the gateway config in the operator's editor."""
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
+    return subprocess.call([editor, str(files.gateway_config)])
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the launcher."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.refresh_available_models:
+        return _fail(
+            "--refresh-available-models was removed with the bespoke server: "
+            "the gateway's admin panel (Fetch models) owns the model list now."
+        )
+
+    files = launcher.layout(launcher.default_config_dir())
     try:
-        # Display version check warning on startup (like argo-proxy)
-        logger.warning(f"Running AskSage-Proxy {version_check()}")
+        legacy = _prepare_config(args, files)
+    except launcher.LauncherError as exc:
+        return _fail(str(exc))
 
-        config = load_config(args.config)
+    if args.show:
+        return _show(files)
+    if args.edit:
+        return _edit(files)
 
-        # Override config with command line arguments
-        if args.host:
-            config.host = args.host
-        if args.port:
-            config.port = args.port
-        if args.verbose:
-            config.verbose = args.verbose
+    if not launcher.have_gateway():
+        return _fail(launcher.which_gateway())
 
-        # Validate models during startup
-        logger.info("Initializing model registry...")
-        try:
-            force_validate = args.refresh_available_models
-            if force_validate:
-                logger.info(
-                    "Forcing model validation due to --refresh-available-models flag"
-                )
-            asyncio.run(load_or_validate_models(config, force_validate=force_validate))
-            logger.info("Model validation completed successfully")
-        except Exception as e:
-            logger.error(f"Model validation failed: {e}")
-            logger.warning("Continuing with startup, but models may not be available")
+    if not args.no_preflight:
+        ok, detail = launcher.preflight_shims(files)
+        if not ok:
+            return _fail(launcher.preflight_message(detail, files))
+        _print(f"AskSage shims: {detail}")
 
-        logger.info(f"Starting AskSage Proxy on {config.host}:{config.port}")
-        run_app(config)
+    hint = launcher.token_email_hint()
+    if hint:
+        _print(f"Warning: {hint}")
 
-    except Exception as e:
-        logger.error(f"Failed to start server: {e}")
-        sys.exit(1)
+    log_level = "debug" if (args.verbose or legacy.get("verbose")) else None
+    if args.dry_run:
+        argv_out = launcher.run(
+            files,
+            legacy,
+            host=args.host,
+            port=args.port,
+            log_level=log_level,
+            dry_run=True,
+        )
+        _print(" ".join(argv_out))
+        return 0
+    launcher.run(files, legacy, host=args.host, port=args.port, log_level=log_level)
+    return 0  # pragma: no cover - run() execs
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())
+
+
+__all__ = ["build_parser", "main"]
